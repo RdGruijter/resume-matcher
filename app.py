@@ -1,21 +1,34 @@
 import streamlit as st
 import spacy
 import re
+import subprocess
+import sys
 
-# --- Key Change: Use st.cache_resource to load the model once ---
+# --- Key Change: A more robust way to handle model downloads ---
+def download_spacy_model(model_name="en_core_web_md"):
+    """
+    Downloads a SpaCy model if it's not already installed.
+    """
+    try:
+        spacy.load(model_name)
+    except OSError:
+        st.info(f"Downloading SpaCy model '{model_name}'. This will only happen once.")
+        subprocess.check_call([sys.executable, "-m", "spacy", "download", model_name])
+        subprocess.check_call([sys.executable, "-m", "spacy", "link", model_name, model_name])
+
+# Call the function to ensure the model is downloaded
+download_spacy_model()
+
 @st.cache_resource
 def load_spacy_model():
     """
     Loads the SpaCy model with caching.
     The model will only be loaded the first time this function is called.
     """
-    try:
-        return spacy.load("en_core_web_md")
-    except OSError:
-        st.error("SpaCy model 'en_core_web_md' not found. Please run: python -m spacy download en_core_web_md")
-        st.stop()
+    return spacy.load("en_core_web_md")
 
 nlp = load_spacy_model()
+# The rest of your code follows...
 
 def normalize_degrees(text):
     """
