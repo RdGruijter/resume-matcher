@@ -4,18 +4,19 @@ import re
 import subprocess
 import sys
 
-# --- Key Change: A more robust way to handle model downloads ---
 def download_spacy_model(model_name="en_core_web_md"):
     """
     Downloads a SpaCy model if it's not already installed.
+    This version is more robust for deployment environments.
     """
     try:
         spacy.load(model_name)
     except OSError:
         st.info(f"Downloading SpaCy model '{model_name}'. This will only happen once.")
+        # This command downloads the model directly to the user's home directory.
         subprocess.check_call([sys.executable, "-m", "spacy", "download", model_name])
-        subprocess.check_call([sys.executable, "-m", "spacy", "link", model_name, model_name])
-
+        # The link command is removed as it often fails in cloud environments.
+        
 # Call the function to ensure the model is downloaded
 download_spacy_model()
 
@@ -23,11 +24,11 @@ download_spacy_model()
 def load_spacy_model():
     """
     Loads the SpaCy model with caching.
-    The model will only be loaded the first time this function is called.
     """
     return spacy.load("en_core_web_md")
 
 nlp = load_spacy_model()
+# The rest of your app.py code follows...
 # The rest of your code follows...
 
 def normalize_degrees(text):
