@@ -7,35 +7,26 @@ import sys
 def download_spacy_model(model_name="en_core_web_md"):
     """
     Downloads a SpaCy model if it's not already installed.
-    This version is more robust for deployment environments.
     """
     try:
         spacy.load(model_name)
     except OSError:
         st.info(f"Downloading SpaCy model '{model_name}'. This will only happen once.")
-        # Key Change: Use --target to install the model in a user-writable directory.
-        # sys.executable gets the path to the current Python interpreter.
-        # This command installs the model, making it accessible to spacy.load()
-        subprocess.check_call([sys.executable, "-m", "spacy", "download", "--target", ".", model_name])
+        subprocess.check_call([sys.executable, "-m", "spacy", "download", model_name])
         
-# Call the function to ensure the model is downloaded
 download_spacy_model()
 
 @st.cache_resource
 def load_spacy_model():
     """
-    Loads the SpaCy model with caching.
+    Loads the SpaCy model by its folder path, which is more reliable
+    in a deployment environment.
     """
     return spacy.load("en_core_web_md")
 
 nlp = load_spacy_model()
-# The rest of your app.py code follows...
-# The rest of your code follows...
 
 def normalize_degrees(text):
-    """
-    Normalizes common degree abbreviations and phrases into a standard format.
-    """
     text = re.sub(r'master of science', 'master\'s degree', text, flags=re.IGNORECASE)
     text = re.sub(r'\bmsc\b', 'master\'s degree', text, flags=re.IGNORECASE)
     text = re.sub(r'bachelor of science', 'bachelor\'s degree', text, flags=re.IGNORECASE)
@@ -43,18 +34,12 @@ def normalize_degrees(text):
     text = re.sub(r'ph\.?d\.?', 'doctorate degree', text, flags=re.IGNORECASE)
     return text
 
-# --- The rest of your code remains the same ---
-
 CUSTOM_STOP_WORDS = {"ideal", "candidate", "responsibilities", "requirements", "role", 
                      "experience", "work", "solution", "team", "project", "strong", 
                      "passion", "degree", "field", "innovations", "futuretech", "us",
                      "looking", "seeking", "join", "ability", "skill", "expertise"}
 
 def extract_keywords_spacy(text):
-    """
-    Extracts potential keywords from text using SpaCy.
-    This version includes text cleaning and a custom stop word list to filter out noise.
-    """
     normalized_text = normalize_degrees(text)
     cleaned_text = re.sub(r'[^\w\s]', ' ', normalized_text)
     doc = nlp(cleaned_text.lower())
@@ -75,9 +60,6 @@ def extract_keywords_spacy(text):
 
 
 def calculate_semantic_score(jd_keywords, resume_keywords, similarity_threshold=0.7):
-    """
-    Calculates a match score based on both exact keyword matches and semantic similarity.
-    """
     if not jd_keywords:
         return 100, []
 
@@ -103,9 +85,6 @@ def calculate_semantic_score(jd_keywords, resume_keywords, similarity_threshold=
 
 
 def parse_resume_sections(resume_text):
-    """
-    Parses resume text into sections based on common headers.
-    """
     sections = {}
     pattern = re.compile(r'^(?:summary|profile|experience|work history|education|skills|projects|certifications)\s*$', re.MULTILINE | re.IGNORECASE)
     
@@ -126,9 +105,6 @@ def parse_resume_sections(resume_text):
 
 
 def generate_contextual_suggestions(missing_keywords, sections):
-    """
-    Generates specific, section-based suggestions for truly missing keywords.
-    """
     suggestions = {}
     
     skill_keywords = {"python", "aws", "machine learning", "pytorch", "gcp", "azure", "sql", "tableau", "docker", "r", "predictive modeling", "statistical modeling", "data analysis", "data analytics", "data visualization", "a/b testing"}
@@ -160,7 +136,6 @@ st.set_page_config(page_title="AI Job Assistant PoC: Resume Matcher", layout="wi
 st.title("AI Job Assistant: Resume & Job Description Matcher (PoC)")
 st.write("Enter your resume and a job description below to see how well they align.")
 
-# --- Input Fields ---
 col1, col2 = st.columns(2)
 
 with col1:
@@ -173,7 +148,6 @@ with col2:
     jd_input = st.text_area("Paste the job description text here:", height=300,
                             placeholder="E.g., We are looking for a Machine Learning Engineer to design and develop AI applications...")
 
-# --- Analysis Button ---
 if st.button("Analyze Resume vs. Job Description"):
     if resume_input and jd_input:
         with st.spinner("Analyzing..."):
@@ -192,7 +166,6 @@ if st.button("Analyze Resume vs. Job Description"):
     else:
         st.warning("Please paste text into both the Resume and Job Description fields.")
 
-# --- Display Results ---
 if 'results' in st.session_state:
     results = st.session_state.results
 
