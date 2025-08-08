@@ -13,9 +13,10 @@ def download_spacy_model(model_name="en_core_web_md"):
         spacy.load(model_name)
     except OSError:
         st.info(f"Downloading SpaCy model '{model_name}'. This will only happen once.")
-        # This command downloads the model directly to the user's home directory.
-        subprocess.check_call([sys.executable, "-m", "spacy", "download", model_name])
-        # The link command is removed as it often fails in cloud environments.
+        # Key Change: Use --target to install the model in a user-writable directory.
+        # sys.executable gets the path to the current Python interpreter.
+        # This command installs the model, making it accessible to spacy.load()
+        subprocess.check_call([sys.executable, "-m", "spacy", "download", "--target", ".", model_name])
         
 # Call the function to ensure the model is downloaded
 download_spacy_model()
