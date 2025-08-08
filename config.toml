@@ -1,4 +1,0 @@
-[runner]
-# Set the Python version to use
-magicEnabled = false
-python = "3.9"
