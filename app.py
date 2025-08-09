@@ -10,7 +10,7 @@ def load_spacy_model():
     """
     try:
         # The model is loaded directly from the folder in the repository.
-        return spacy.load("en_core_web_md")
+        return spacy.load("./en_core_web_md")
     except OSError:
         st.error("SpaCy model 'en_core_web_md' not found. Please ensure the model folder is in the same directory.")
         st.stop()
