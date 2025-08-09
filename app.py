@@ -1,32 +1,26 @@
 import streamlit as st
 import spacy
 import re
-import subprocess
-import sys
 
-def download_spacy_model(model_name="en_core_web_md"):
-    """
-    Downloads a SpaCy model if it's not already installed.
-    """
-    try:
-        spacy.load(model_name)
-    except OSError:
-        st.info(f"Downloading SpaCy model '{model_name}'. This will only happen once.")
-        subprocess.check_call([sys.executable, "-m", "spacy", "download", model_name])
-        
-download_spacy_model()
-
+# This code assumes the 'en_core_web_md' model folder is in the same directory.
 @st.cache_resource
 def load_spacy_model():
     """
-    Loads the SpaCy model by its folder path, which is more reliable
-    in a deployment environment.
+    Loads the SpaCy model with caching.
     """
-    return spacy.load("en_core_web_md")
+    try:
+        # The model is loaded directly from the folder in the repository.
+        return spacy.load("en_core_web_md")
+    except OSError:
+        st.error("SpaCy model 'en_core_web_md' not found. Please ensure the model folder is in the same directory.")
+        st.stop()
 
 nlp = load_spacy_model()
 
 def normalize_degrees(text):
+    """
+    Normalizes common degree abbreviations and phrases into a standard format.
+    """
     text = re.sub(r'master of science', 'master\'s degree', text, flags=re.IGNORECASE)
     text = re.sub(r'\bmsc\b', 'master\'s degree', text, flags=re.IGNORECASE)
     text = re.sub(r'bachelor of science', 'bachelor\'s degree', text, flags=re.IGNORECASE)
@@ -40,6 +34,9 @@ CUSTOM_STOP_WORDS = {"ideal", "candidate", "responsibilities", "requirements", "
                      "looking", "seeking", "join", "ability", "skill", "expertise"}
 
 def extract_keywords_spacy(text):
+    """
+    Extracts potential keywords from text using SpaCy.
+    """
     normalized_text = normalize_degrees(text)
     cleaned_text = re.sub(r'[^\w\s]', ' ', normalized_text)
     doc = nlp(cleaned_text.lower())
@@ -60,6 +57,9 @@ def extract_keywords_spacy(text):
 
 
 def calculate_semantic_score(jd_keywords, resume_keywords, similarity_threshold=0.7):
+    """
+    Calculates a match score based on both exact keyword matches and semantic similarity.
+    """
     if not jd_keywords:
         return 100, []
 
@@ -85,6 +85,9 @@ def calculate_semantic_score(jd_keywords, resume_keywords, similarity_threshold=
 
 
 def parse_resume_sections(resume_text):
+    """
+    Parses resume text into sections based on common headers.
+    """
     sections = {}
     pattern = re.compile(r'^(?:summary|profile|experience|work history|education|skills|projects|certifications)\s*$', re.MULTILINE | re.IGNORECASE)
     
@@ -105,6 +108,9 @@ def parse_resume_sections(resume_text):
 
 
 def generate_contextual_suggestions(missing_keywords, sections):
+    """
+    Generates specific, section-based suggestions for truly missing keywords.
+    """
     suggestions = {}
     
     skill_keywords = {"python", "aws", "machine learning", "pytorch", "gcp", "azure", "sql", "tableau", "docker", "r", "predictive modeling", "statistical modeling", "data analysis", "data analytics", "data visualization", "a/b testing"}
@@ -156,6 +162,8 @@ if st.button("Analyze Resume vs. Job Description"):
             
             match_score, truly_missing_keywords = calculate_semantic_score(jd_keywords, resume_keywords)
 
+            if 'results' not in st.session_state:
+                st.session_state.results = {}
             st.session_state.results = {
                 "match_score": match_score,
                 "missing_keywords": truly_missing_keywords,
@@ -166,7 +174,7 @@ if st.button("Analyze Resume vs. Job Description"):
     else:
         st.warning("Please paste text into both the Resume and Job Description fields.")
 
-if 'results' in st.session_state:
+if 'results' in st.session_state and st.session_state.results:
     results = st.session_state.results
 
     st.markdown("---")
