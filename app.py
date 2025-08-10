@@ -217,12 +217,14 @@ with col2:
 
 if st.button("Analyze Resume vs. Job Description"):
     logger.info(f"Event: analyze_button_clicked | user_id: {st.session_state.user_id}")
-    st.session_state.analysis_runs += 1
     
+    # Check for empty inputs first
     if not resume_input or not jd_input:
         st.warning("Please paste text into both the Resume and Job Description fields.")
         logger.warning(f"Event: input_missing | user_id: {st.session_state.user_id}")
     else:
+        # Increment the counter and run the analysis only if inputs are valid
+        st.session_state.analysis_runs += 1
         try:
             with st.spinner("Analyzing..."):
                 analysis_start_time = time.time()
@@ -245,7 +247,6 @@ if st.button("Analyze Resume vs. Job Description"):
         except Exception as e:
             logger.error(f"Event: analysis_failed | user_id: {st.session_state.user_id} | error: {e}\n{traceback.format_exc()}")
             st.error("An error occurred during analysis. Please check your inputs or try again later.")
-
 if 'results' in st.session_state:
     results = st.session_state.results
 
