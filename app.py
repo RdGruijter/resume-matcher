@@ -208,6 +208,31 @@ def get_text_from_pdf(uploaded_file):
             st.error("Error extracting text from the PDF file. Please ensure it's a valid PDF.")
     return ""
 
+def generate_alternative_phrasing(missing_keywords):
+    """
+    Generates alternative phrasing and related skills for missing keywords.
+    """
+    phrasing_map = {
+        "tensorflow": ["deep learning frameworks", "neural networks", "machine learning libraries"],
+        "pytorch": ["deep learning frameworks", "neural networks"],
+        "sql": ["database management", "relational databases", "data querying"],
+        "aws": ["cloud services", "cloud computing", "amazon web services"],
+        "nlp": ["natural language processing", "text analysis", "text mining"],
+        "docker": ["containerization", "devops tools", "microservices"],
+        "predictive modeling": ["statistical analysis", "forecasting"],
+        "data visualization": ["tableau", "power bi", "matplotlib"],
+        "algorithms": ["data structures", "problem-solving skills"]
+    }
+    
+    suggestions = {}
+    for keyword in missing_keywords:
+        keyword_lower = keyword.lower()
+        for key, alternatives in phrasing_map.items():
+            if key in keyword_lower:
+                suggestions.setdefault(key, set()).update(alternatives)
+    
+    return suggestions
+
 # --- Streamlit UI ---
 st.set_page_config(page_title="AI Job Assistant PoC: Resume Matcher", layout="wide")
 st.title("AI Job Assistant: Resume & Job Description Matcher (PoC)")
@@ -251,13 +276,17 @@ if st.button("Analyze Resume vs. Job Description"):
                 resume_keywords = extract_keywords_spacy(resume_text)
                 
                 match_score, truly_missing_keywords = calculate_semantic_score(jd_keywords, resume_keywords)
+                
+                # --- NEW FEATURE: Generate alternative phrasing
+                alternative_phrasing = generate_alternative_phrasing(truly_missing_keywords)
 
                 st.session_state.results = {
                     "match_score": match_score,
                     "missing_keywords": truly_missing_keywords,
                     "jd_keywords": jd_keywords,
                     "resume_keywords": resume_keywords,
-                    "initial_resume_text": resume_text
+                    "initial_resume_text": resume_text,
+                    "alternative_phrasing": alternative_phrasing # Add new suggestions to session state
                 }
                 
                 analysis_duration = time.time() - analysis_start_time
@@ -310,6 +339,14 @@ if st.session_state.results:
     else:
         st.success("Your resume is well-aligned with the job description. No contextual suggestions needed.")
         
+    # --- NEW UI ELEMENT: Display Alternative Phrasing
+    if results['alternative_phrasing']:
+        st.markdown("---")
+        st.subheader("Alternative Phrasing & Related Skills")
+        st.write("Consider including these related skills or alternative phrases to improve your match:")
+        for missing_skill, alternatives in results['alternative_phrasing'].items():
+            st.markdown(f"**{missing_skill.title()}:** {', '.join(sorted(list(alternatives)))}")
+
 st.markdown("---")
 st.markdown("### How this PoC works:")
 st.markdown("""
@@ -318,4 +355,5 @@ st.markdown("""
 3.  It calculates a **semantic match score** based on the percentage of job description keywords found in your resume, considering both direct matches and semantic similarity.
 4.  It identifies which keywords from the **Job Description** are truly missing from your **Resume**.
 5.  It provides more detailed **contextual suggestions**, guiding you on where to place keywords in your resume.
+6.  It now suggests **alternative phrasing and related skills** to help you broaden your resume's keyword base.
 """)
