@@ -7,6 +7,7 @@ import uuid
 import time
 import os
 import psutil
+import fitz # PyMuPDF
 
 # --- Configure Logging ---
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -20,6 +21,8 @@ if 'analysis_runs' not in st.session_state:
     st.session_state.analysis_runs = 0
 if 'total_runtime' not in st.session_state:
     st.session_state.total_runtime = 0.0
+if 'results' not in st.session_state:
+    st.session_state.results = None
 
 # This code assumes the 'en_core_web_md' model folder is in the same directory.
 @st.cache_resource
@@ -189,10 +192,26 @@ def generate_contextual_suggestions(missing_keywords, sections):
     logger.debug(f"Generated {len(suggestions)} types of contextual suggestions.")
     return suggestions
 
+def get_text_from_pdf(uploaded_file):
+    """
+    Extracts text from a PDF file.
+    """
+    if uploaded_file is not None:
+        try:
+            doc = fitz.open(stream=uploaded_file.read(), filetype="pdf")
+            text = ""
+            for page in doc:
+                text += page.get_text()
+            return text
+        except Exception as e:
+            logger.error(f"Error extracting text from PDF: {e}")
+            st.error("Error extracting text from the PDF file. Please ensure it's a valid PDF.")
+    return ""
+
 # --- Streamlit UI ---
 st.set_page_config(page_title="AI Job Assistant PoC: Resume Matcher", layout="wide")
 st.title("AI Job Assistant: Resume & Job Description Matcher (PoC)")
-st.write("Enter your resume and a job description below to see how well they align.")
+st.write("Upload your resume and enter a job description to see how well they align.")
 
 # --- Monitoring Metrics in Sidebar ---
 with st.sidebar:
@@ -201,15 +220,14 @@ with st.sidebar:
     st.write(f"**Analysis Runs:** `{st.session_state.analysis_runs}`")
     st.write(f"**Total Runtime:** `{st.session_state.total_runtime:.2f}`s")
     
-    # You can also add more detailed metrics like memory usage
     process = psutil.Process(os.getpid())
     st.write(f"**Memory Usage:** `{process.memory_info().rss / 1024 / 1024:.2f}` MB")
     
 col1, col2 = st.columns(2)
 
 with col1:
-    st.header("Your Resume")
-    resume_input = st.text_area("Paste your resume text here:", height=300)
+    st.header("Your Resume (PDF)")
+    resume_file = st.file_uploader("Upload your resume as a PDF", type=["pdf"])
 
 with col2:
     st.header("Job Description")
@@ -218,18 +236,19 @@ with col2:
 if st.button("Analyze Resume vs. Job Description"):
     logger.info(f"Event: analyze_button_clicked | user_id: {st.session_state.user_id}")
     
-    # Check for empty inputs first
-    if not resume_input or not jd_input:
-        st.warning("Please paste text into both the Resume and Job Description fields.")
+    if resume_file is None or not jd_input:
+        st.warning("Please upload a resume PDF and paste the job description text.")
         logger.warning(f"Event: input_missing | user_id: {st.session_state.user_id}")
     else:
-        # Increment the counter and run the analysis only if inputs are valid
         st.session_state.analysis_runs += 1
         try:
             with st.spinner("Analyzing..."):
                 analysis_start_time = time.time()
+                
+                resume_text = get_text_from_pdf(resume_file)
+                
                 jd_keywords = extract_keywords_spacy(jd_input)
-                resume_keywords = extract_keywords_spacy(resume_input)
+                resume_keywords = extract_keywords_spacy(resume_text)
                 
                 match_score, truly_missing_keywords = calculate_semantic_score(jd_keywords, resume_keywords)
 
@@ -238,7 +257,7 @@ if st.button("Analyze Resume vs. Job Description"):
                     "missing_keywords": truly_missing_keywords,
                     "jd_keywords": jd_keywords,
                     "resume_keywords": resume_keywords,
-                    "initial_resume_text": resume_input
+                    "initial_resume_text": resume_text
                 }
                 
                 analysis_duration = time.time() - analysis_start_time
@@ -247,7 +266,9 @@ if st.button("Analyze Resume vs. Job Description"):
         except Exception as e:
             logger.error(f"Event: analysis_failed | user_id: {st.session_state.user_id} | error: {e}\n{traceback.format_exc()}")
             st.error("An error occurred during analysis. Please check your inputs or try again later.")
-if 'results' in st.session_state:
+
+# Display Results Section
+if st.session_state.results:
     results = st.session_state.results
 
     st.markdown("---")
