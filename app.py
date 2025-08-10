@@ -65,21 +65,32 @@ CUSTOM_STOP_WORDS = {"ideal", "candidate", "responsibilities", "requirements", "
 
 def extract_keywords_spacy(text):
     """
-    Extracts potential keywords from text using SpaCy.
+    Extracts potential keywords from text using SpaCy, prioritizing multi-word phrases.
     """
     try:
         start_time = time.time()
         normalized_text = normalize_degrees(text)
         cleaned_text = re.sub(r'[^\w\s]', ' ', normalized_text)
         doc = nlp(cleaned_text.lower())
+        
         keywords = set()
-
+        
+        # Keep track of tokens that are part of a noun chunk
+        chunk_token_indices = set()
+        
+        # First, extract multi-word noun chunks (e.g., "hyperparameter tuning")
         for chunk in doc.noun_chunks:
             keywords.add(chunk.text)
-
+            # Add the indices of the tokens in the chunk to our set
+            for token in chunk:
+                chunk_token_indices.add(token.i)
+        
+        # Second, extract individual tokens (nouns, adjectives, verbs)
         for token in doc:
-            if token.pos_ in ["NOUN", "ADJ", "VERB"]:
-                keywords.add(token.lemma_)
+            # Only add the token if it's not part of a multi-word noun chunk we've already captured
+            if token.i not in chunk_token_indices:
+                if token.pos_ in ["NOUN", "ADJ", "VERB"]:
+                    keywords.add(token.lemma_)
 
         filtered_keywords = {
             kw for kw in keywords
