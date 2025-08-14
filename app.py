@@ -1,11 +1,11 @@
 """
-AI Job Assistant PoC - Resume Matcher with Job Search
------------------------------------------------------
+AI Job Assistant PoC - Resume Matcher with Live Job Search
+---------------------------------------------------------
 This Streamlit application helps a candidate find a matching job.
-It allows users to upload their resume, browse a list of sample job descriptions,
-filter them, and then get a detailed analysis of how well their resume matches the selected job.
+It allows users to upload their resume, browse live job listings from the Adzuna API,
+and then get a detailed analysis of how well their resume matches the selected job.
 
-MVP Idea 2: Add basic job search and filtering (manual application).
+This version replaces the hard-coded job list with a real API integration.
 """
 
 import streamlit as st
@@ -18,6 +18,7 @@ import time
 import os
 import psutil
 import fitz  # PyMuPDF for PDF parsing
+import requests # NEW: for making API requests
 
 # =========================
 # --- Configure Logging ---
@@ -47,7 +48,6 @@ EXPERIENCE_VERBS = {
     "deploy", "leverage", "optimize", "analyze", "integrate", "present", "contributed"
 }
 
-# Alternative phrases to suggest when keywords are missing
 ALTERNATIVE_PHRASING_MAP = {
     "tensorflow": ["deep learning frameworks", "neural networks", "machine learning libraries"],
     "pytorch": ["deep learning frameworks", "neural networks"],
@@ -60,89 +60,11 @@ ALTERNATIVE_PHRASING_MAP = {
     "algorithms": ["data structures", "problem-solving skills"]
 }
 
-# Hard-coded list of sample job descriptions for MVP
-JOB_LIST = [
-    {
-        "id": 1,
-        "title": "Senior Data Scientist",
-        "company": "Tech Innovations Inc.",
-        "location": "San Francisco, CA",
-        "description": """
-        Overview:
-        We are seeking an experienced and highly motivated Senior Data Scientist to lead our data-driven initiatives. The ideal candidate will be a strategic thinker with a proven track record of developing and deploying advanced machine learning models that deliver significant business value. In this senior role, you will not only be a technical expert but also a mentor to junior team members, helping to shape our data science roadmap and drive best practices.
-
-        Key Responsibilities:
-        - Lead the entire lifecycle of data science projects, from problem formulation and data collection to model deployment and monitoring.
-        - Design, build, and deploy sophisticated machine learning, deep learning, and statistical models to solve complex business problems.
-        - Analyze large, unstructured datasets to extract actionable insights and identify key trends.
-        - Collaborate with business stakeholders, product managers, and engineering teams to translate business needs into technical requirements.
-        - Mentor and guide junior data scientists, fostering a culture of continuous learning and technical excellence.
-        - Communicate complex findings and recommendations clearly and concisely to both technical and non-technical audiences.
-        - Evaluate and recommend new technologies and methodologies to enhance our data science capabilities.
-
-        Required Qualifications:
-        - Master's or Ph.D. in Computer Science, Statistics, Mathematics, or a related quantitative field.
-        - Minimum of 5+ years of hands-on experience as a Data Scientist or in a similar role.
-        - Expert-level proficiency in Python and its data science ecosystem (NumPy, pandas, scikit-learn).
-        - Deep expertise with machine learning frameworks like TensorFlow or PyTorch.
-        - Strong knowledge of SQL for data extraction and manipulation.
-        - Proven experience with cloud platforms such as AWS, GCP, or Azure.
-        - Excellent problem-solving skills and a strong understanding of statistical modeling and data mining techniques.
-        """,
-        "url": "https://www.example-job-1.com"
-    },
-    {
-        "id": 2,
-        "title": "Junior Data Analyst",
-        "company": "Global Analytics Co.",
-        "location": "New York, NY",
-        "description": """
-        Overview:
-        Global Analytics Co. is looking for a Junior Data Analyst to join our growing team. You will be responsible for collecting, cleaning, and analyzing data to support our business teams. This is an excellent opportunity for an entry-level professional to gain hands-on experience in a fast-paced environment.
-
-        Key Responsibilities:
-        - Collect data from various sources and maintain databases.
-        - Clean and preprocess data to ensure accuracy and consistency.
-        - Create reports and dashboards using Tableau to visualize data insights.
-        - Assist senior analysts with ad-hoc data analysis requests.
-        - Communicate findings to team members.
-
-        Required Qualifications:
-        - Bachelor's degree in a quantitative field (e.g., Mathematics, Economics, Statistics).
-        - Proficiency in SQL and Excel.
-        - Experience with data visualization tools like Tableau.
-        - Basic knowledge of statistical analysis.
-        - Strong attention to detail and communication skills.
-        """,
-        "url": "https://www.example-job-2.com"
-    },
-    {
-        "id": 3,
-        "title": "Machine Learning Engineer",
-        "company": "NextGen AI",
-        "location": "Seattle, WA",
-        "description": """
-        Overview:
-        We are seeking a talented Machine Learning Engineer to design and implement robust, scalable AI systems. The ideal candidate has strong software engineering skills and a deep understanding of machine learning principles. You will be instrumental in taking our models from research to production.
-
-        Key Responsibilities:
-        - Develop and deploy machine learning models at scale.
-        - Build and maintain data pipelines for model training and inference.
-        - Work with cloud platforms (AWS, Azure) and containerization technologies (Docker, Kubernetes).
-        - Collaborate with data scientists to optimize model performance.
-        - Implement CI/CD pipelines for ML models.
-
-        Required Qualifications:
-        - Bachelor's or Master's degree in Computer Science or a related field.
-        - Strong programming skills in Python.
-        - 3+ years of experience in a machine learning or software engineering role.
-        - Experience with MLOps and productionizing ML models.
-        - Familiarity with deep learning frameworks like TensorFlow or PyTorch.
-        """,
-        "url": "https://www.example-job-3.com"
-    }
-]
-
+# NEW: Adzuna API Credentials
+# For security, consider storing these as Streamlit Secrets or environment variables
+# For this example, we'll keep them as constants.
+ADZUNA_APP_ID = "331d874f"
+ADZUNA_APP_KEY = "8b105108eb27439039b03cc12c11db4c"
 
 # =========================
 # --- Session State ---
@@ -157,6 +79,8 @@ if 'selected_job' not in st.session_state:
     st.session_state.selected_job = None
 if 'results' not in st.session_state:
     st.session_state.results = None
+if 'jobs' not in st.session_state:
+    st.session_state.jobs = []
 
 # =========================
 # --- Load SpaCy Model ---
@@ -182,8 +106,51 @@ def load_spacy_model():
 nlp = load_spacy_model()
 
 # =========================
-# --- Text Preprocessing ---
+# --- NEW: API & Data Fetching Functions ---
 # =========================
+def fetch_jobs_from_api(query):
+    """
+    Fetches job listings from the Adzuna API based on a search query.
+    Returns a list of jobs, or an empty list if the API call fails.
+    """
+    base_url = "https://api.adzuna.com/v1/api/jobs/us/search/1"
+    params = {
+        "app_id": ADZUNA_APP_ID,
+        "app_key": ADZUNA_APP_KEY,
+        "what": query,
+        "results_per_page": 10,
+        "content-type": "application/json"
+    }
+    
+    try:
+        response = requests.get(base_url, params=params)
+        response.raise_for_status()  # Raise an exception for bad status codes (4xx or 5xx)
+        data = response.json()
+        
+        # Map Adzuna API fields to the format our app expects
+        jobs = []
+        for job_data in data.get('results', []):
+            jobs.append({
+                "id": job_data.get('id'),
+                "title": job_data.get('title'),
+                "company": job_data.get('company', {}).get('display_name', 'N/A'),
+                "location": job_data.get('location', {}).get('display_name', 'N/A'),
+                "description": job_data.get('description'),
+                "url": job_data.get('redirect_url')
+            })
+        return jobs
+    except requests.exceptions.RequestException as e:
+        st.error(f"Error fetching jobs from Adzuna API: {e}")
+        return []
+    except Exception as e:
+        st.error(f"An unexpected error occurred while processing job data: {e}")
+        return []
+
+
+# =========================
+# --- Text Preprocessing & Analysis Functions (unchanged) ---
+# =========================
+# ... (all your existing functions like normalize_degrees, extract_keywords_spacy, etc. remain the same) ...
 def normalize_degrees(text: str) -> str:
     """
     Normalize common degree abbreviations in text for better keyword matching.
@@ -317,12 +284,13 @@ def generate_alternative_phrasing(missing_keywords: set) -> dict:
                 suggestions.setdefault(key, set()).update(alternatives)
     return suggestions
 
+
 # =========================
 # --- Streamlit UI ---
 # =========================
 st.set_page_config(page_title="AI Job Assistant PoC", layout="centered")
 st.title("AI Job Assistant 📄🤝💼")
-st.write("Upload your resume, find a job, and get a match analysis.")
+st.write("Upload your resume, search for a job, and get a match analysis.")
 
 # Sidebar for session info
 with st.sidebar:
@@ -342,21 +310,22 @@ with col1:
 
 with col2:
     st.header("Job Search")
-    search_query = st.text_input("Filter jobs by title or company:")
+    search_query = st.text_input("Enter job title or keyword (e.g., 'data scientist'):")
+    if st.button("Search Jobs", use_container_width=True) and search_query:
+        st.session_state.jobs = fetch_jobs_from_api(search_query)
+        st.session_state.selected_job = None # Reset selected job after new search
+        st.session_state.results = None # Reset results after new search
+
     st.markdown("---")
 
-    filtered_jobs = [
-        job for job in JOB_LIST
-        if search_query.lower() in job['title'].lower() or search_query.lower() in job['company'].lower()
-    ]
-
-    if filtered_jobs:
-        for job in filtered_jobs:
+    if st.session_state.jobs:
+        for job in st.session_state.jobs:
             if st.button(f"**{job['title']}** at {job['company']}", key=f"job-{job['id']}", use_container_width=True):
                 st.session_state.selected_job = job
-                st.session_state.results = None  # Clear previous results
+                st.session_state.results = None
     else:
-        st.info("No jobs match your search query.")
+        st.info("Search for a job to see listings.")
+
 
 # Display selected job and analysis button
 if st.session_state.selected_job:
@@ -370,13 +339,11 @@ if st.session_state.selected_job:
         st.markdown(job['description'])
         st.markdown(f"[Apply Now]({job['url']})", unsafe_allow_html=True)
     
-    # Analyze button is now context-aware of the selected job
     if st.button("Analyze Match with Resume", use_container_width=True):
         if resume_file:
             st.session_state.analysis_runs += 1
             start_time = time.time()
             
-            # --- Analysis logic ---
             try:
                 resume_text = get_text_from_pdf(resume_file)
                 jd_keywords = extract_keywords_spacy(job['description'])
@@ -400,6 +367,7 @@ if st.session_state.selected_job:
         else:
             st.warning("Please upload your resume as a PDF file first.")
 
+
 # =========================
 # --- Results Section ---
 # =========================
@@ -408,11 +376,11 @@ if st.session_state.results:
     st.markdown("---")
     
     if results['match_score'] >= 80:
-        badge_color = "#4CAF50"  # Green
+        badge_color = "#4CAF50"
     elif results['match_score'] >= 50:
-        badge_color = "#FFC107"  # Amber
+        badge_color = "#FFC107"
     else:
-        badge_color = "#F44336"  # Red
+        badge_color = "#F44336"
 
     st.markdown(
         f"""
@@ -435,34 +403,4 @@ if st.session_state.results:
         st.write(", ".join(sorted(results['resume_keywords'])))
 
     with st.expander("Missing Keywords"):
-        if results['missing_keywords']:
-            st.warning(", ".join(sorted(results['missing_keywords'])))
-        else:
-            st.success("All keywords covered!")
-
-    with st.expander("Contextual Suggestions"):
-        if results['missing_keywords']:
-            sections = parse_resume_sections(results['resume_text'])
-            suggestions = generate_contextual_suggestions(results['missing_keywords'], sections)
-            
-            if suggestions:
-                for section, suggestions_list in suggestions.items():
-                    st.markdown(f"**Suggestions for your '{section}' section:**")
-                    for suggestion in suggestions_list:
-                        st.info(suggestion)
-            else:
-                st.info("No specific contextual suggestions could be generated.")
-        else:
-            st.success("Your resume is well-aligned with the job description. No contextual suggestions needed.")
-
-    with st.expander("Alternative Phrasing"):
-        if results['alternative_phrasing']:
-            st.write("Consider including these related skills or alternative phrases:")
-            for missing_skill, alternatives in results['alternative_phrasing'].items():
-                st.markdown(f"**{missing_skill.title()}:** {', '.join(sorted(list(alternatives)))}")
-        else:
-            st.info("No alternative phrasing suggestions at this time.")
-
-    st.markdown("---")
-    st.info(f"You've chosen to apply for: **{st.session_state.selected_job['title']}** at **{st.session_state.selected_job['company']}**")
-    st.markdown(f"[Apply to this job now]({st.session_state.selected_job['url']})", unsafe_allow_html=True)
+        if results['missing
