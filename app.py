@@ -1,15 +1,11 @@
 """
-AI Job Assistant PoC - Resume Matcher
--------------------------------------
-This Streamlit application compares a candidate's resume with a job description
-to determine how well they match. It extracts keywords, calculates a match score,
-identifies missing skills, and gives contextual suggestions for improvement.
+AI Job Assistant PoC - Resume Matcher with Job Search
+-----------------------------------------------------
+This Streamlit application helps a candidate find a matching job.
+It allows users to upload their resume, browse a list of sample job descriptions,
+filter them, and then get a detailed analysis of how well their resume matches the selected job.
 
-Mobile-friendly features:
-- Centered layout for smaller screens
-- Full-width buttons for touch devices
-- Expanders to hide long lists
-- Color-coded badge for instant match score reading
+MVP Idea 2: Add basic job search and filtering (manual application).
 """
 
 import streamlit as st
@@ -64,17 +60,103 @@ ALTERNATIVE_PHRASING_MAP = {
     "algorithms": ["data structures", "problem-solving skills"]
 }
 
+# Hard-coded list of sample job descriptions for MVP
+JOB_LIST = [
+    {
+        "id": 1,
+        "title": "Senior Data Scientist",
+        "company": "Tech Innovations Inc.",
+        "location": "San Francisco, CA",
+        "description": """
+        Overview:
+        We are seeking an experienced and highly motivated Senior Data Scientist to lead our data-driven initiatives. The ideal candidate will be a strategic thinker with a proven track record of developing and deploying advanced machine learning models that deliver significant business value. In this senior role, you will not only be a technical expert but also a mentor to junior team members, helping to shape our data science roadmap and drive best practices.
+
+        Key Responsibilities:
+        - Lead the entire lifecycle of data science projects, from problem formulation and data collection to model deployment and monitoring.
+        - Design, build, and deploy sophisticated machine learning, deep learning, and statistical models to solve complex business problems.
+        - Analyze large, unstructured datasets to extract actionable insights and identify key trends.
+        - Collaborate with business stakeholders, product managers, and engineering teams to translate business needs into technical requirements.
+        - Mentor and guide junior data scientists, fostering a culture of continuous learning and technical excellence.
+        - Communicate complex findings and recommendations clearly and concisely to both technical and non-technical audiences.
+        - Evaluate and recommend new technologies and methodologies to enhance our data science capabilities.
+
+        Required Qualifications:
+        - Master's or Ph.D. in Computer Science, Statistics, Mathematics, or a related quantitative field.
+        - Minimum of 5+ years of hands-on experience as a Data Scientist or in a similar role.
+        - Expert-level proficiency in Python and its data science ecosystem (NumPy, pandas, scikit-learn).
+        - Deep expertise with machine learning frameworks like TensorFlow or PyTorch.
+        - Strong knowledge of SQL for data extraction and manipulation.
+        - Proven experience with cloud platforms such as AWS, GCP, or Azure.
+        - Excellent problem-solving skills and a strong understanding of statistical modeling and data mining techniques.
+        """,
+        "url": "https://www.example-job-1.com"
+    },
+    {
+        "id": 2,
+        "title": "Junior Data Analyst",
+        "company": "Global Analytics Co.",
+        "location": "New York, NY",
+        "description": """
+        Overview:
+        Global Analytics Co. is looking for a Junior Data Analyst to join our growing team. You will be responsible for collecting, cleaning, and analyzing data to support our business teams. This is an excellent opportunity for an entry-level professional to gain hands-on experience in a fast-paced environment.
+
+        Key Responsibilities:
+        - Collect data from various sources and maintain databases.
+        - Clean and preprocess data to ensure accuracy and consistency.
+        - Create reports and dashboards using Tableau to visualize data insights.
+        - Assist senior analysts with ad-hoc data analysis requests.
+        - Communicate findings to team members.
+
+        Required Qualifications:
+        - Bachelor's degree in a quantitative field (e.g., Mathematics, Economics, Statistics).
+        - Proficiency in SQL and Excel.
+        - Experience with data visualization tools like Tableau.
+        - Basic knowledge of statistical analysis.
+        - Strong attention to detail and communication skills.
+        """,
+        "url": "https://www.example-job-2.com"
+    },
+    {
+        "id": 3,
+        "title": "Machine Learning Engineer",
+        "company": "NextGen AI",
+        "location": "Seattle, WA",
+        "description": """
+        Overview:
+        We are seeking a talented Machine Learning Engineer to design and implement robust, scalable AI systems. The ideal candidate has strong software engineering skills and a deep understanding of machine learning principles. You will be instrumental in taking our models from research to production.
+
+        Key Responsibilities:
+        - Develop and deploy machine learning models at scale.
+        - Build and maintain data pipelines for model training and inference.
+        - Work with cloud platforms (AWS, Azure) and containerization technologies (Docker, Kubernetes).
+        - Collaborate with data scientists to optimize model performance.
+        - Implement CI/CD pipelines for ML models.
+
+        Required Qualifications:
+        - Bachelor's or Master's degree in Computer Science or a related field.
+        - Strong programming skills in Python.
+        - 3+ years of experience in a machine learning or software engineering role.
+        - Experience with MLOps and productionizing ML models.
+        - Familiarity with deep learning frameworks like TensorFlow or PyTorch.
+        """,
+        "url": "https://www.example-job-3.com"
+    }
+]
+
+
 # =========================
 # --- Session State ---
 # =========================
 if 'user_id' not in st.session_state:
-    st.session_state.user_id = str(uuid.uuid4())  # Unique session identifier
+    st.session_state.user_id = str(uuid.uuid4())
 if 'analysis_runs' not in st.session_state:
-    st.session_state.analysis_runs = 0  # Number of analyses run in this session
+    st.session_state.analysis_runs = 0
 if 'total_runtime' not in st.session_state:
-    st.session_state.total_runtime = 0.0  # Accumulated processing time
+    st.session_state.total_runtime = 0.0
+if 'selected_job' not in st.session_state:
+    st.session_state.selected_job = None
 if 'results' not in st.session_state:
-    st.session_state.results = None  # Store last results
+    st.session_state.results = None
 
 # =========================
 # --- Load SpaCy Model ---
@@ -240,7 +322,7 @@ def generate_alternative_phrasing(missing_keywords: set) -> dict:
 # =========================
 st.set_page_config(page_title="AI Job Assistant PoC", layout="centered")
 st.title("AI Job Assistant 📄🤝💼")
-st.write("Upload your resume and job description to check alignment.")
+st.write("Upload your resume, find a job, and get a match analysis.")
 
 # Sidebar for session info
 with st.sidebar:
@@ -251,45 +333,80 @@ with st.sidebar:
     process = psutil.Process(os.getpid())
     st.markdown(f"**Memory:** `{process.memory_info().rss / 1024 / 1024:.2f}` MB")
 
-# File upload & job description text
-resume_file = st.file_uploader("Resume (PDF)", type=["pdf"])
-jd_input = st.text_area("Job Description", height=200, placeholder="Paste job description here...")
+# Main columns for layout
+col1, col2 = st.columns([1, 2])
 
-# Run analysis button
-if st.button("Analyze Match", use_container_width=True):
-    if resume_file and jd_input.strip():
-        st.session_state.analysis_runs += 1
-        start_time = time.time()
+with col1:
+    st.header("Your Resume (PDF)")
+    resume_file = st.file_uploader("Upload your resume", type=["pdf"])
 
-        # Process input
-        resume_text = get_text_from_pdf(resume_file)
-        jd_keywords = extract_keywords_spacy(jd_input)
-        resume_keywords = extract_keywords_spacy(resume_text)
+with col2:
+    st.header("Job Search")
+    search_query = st.text_input("Filter jobs by title or company:")
+    st.markdown("---")
 
-        # Compare and generate results
-        match_score, missing_keywords = calculate_semantic_score(jd_keywords, resume_keywords)
-        alternative_phrasing = generate_alternative_phrasing(missing_keywords)
+    filtered_jobs = [
+        job for job in JOB_LIST
+        if search_query.lower() in job['title'].lower() or search_query.lower() in job['company'].lower()
+    ]
 
-        # Save in session
-        st.session_state.results = {
-            "match_score": match_score,
-            "missing_keywords": missing_keywords,
-            "jd_keywords": jd_keywords,
-            "resume_keywords": resume_keywords,
-            "resume_text": resume_text,
-            "alternative_phrasing": alternative_phrasing
-        }
-        st.session_state.total_runtime += time.time() - start_time
+    if filtered_jobs:
+        for job in filtered_jobs:
+            if st.button(f"**{job['title']}** at {job['company']}", key=f"job-{job['id']}", use_container_width=True):
+                st.session_state.selected_job = job
+                st.session_state.results = None  # Clear previous results
     else:
-        st.warning("Please upload a PDF resume and paste a job description.")
+        st.info("No jobs match your search query.")
+
+# Display selected job and analysis button
+if st.session_state.selected_job:
+    job = st.session_state.selected_job
+    st.markdown("---")
+    st.header(job['title'])
+    st.subheader(job['company'])
+    st.write(f"📍 {job['location']}")
+    
+    with st.expander("View Full Job Description"):
+        st.markdown(job['description'])
+        st.markdown(f"[Apply Now]({job['url']})", unsafe_allow_html=True)
+    
+    # Analyze button is now context-aware of the selected job
+    if st.button("Analyze Match with Resume", use_container_width=True):
+        if resume_file:
+            st.session_state.analysis_runs += 1
+            start_time = time.time()
+            
+            # --- Analysis logic ---
+            try:
+                resume_text = get_text_from_pdf(resume_file)
+                jd_keywords = extract_keywords_spacy(job['description'])
+                resume_keywords = extract_keywords_spacy(resume_text)
+                
+                match_score, missing_keywords = calculate_semantic_score(jd_keywords, resume_keywords)
+                alternative_phrasing = generate_alternative_phrasing(missing_keywords)
+                
+                st.session_state.results = {
+                    "match_score": match_score,
+                    "missing_keywords": missing_keywords,
+                    "jd_keywords": jd_keywords,
+                    "resume_keywords": resume_keywords,
+                    "resume_text": resume_text,
+                    "alternative_phrasing": alternative_phrasing
+                }
+                st.session_state.total_runtime += time.time() - start_time
+            except Exception as e:
+                st.error(f"An error occurred during analysis: {e}")
+                logger.error(f"Error during analysis: {traceback.format_exc()}")
+        else:
+            st.warning("Please upload your resume as a PDF file first.")
 
 # =========================
 # --- Results Section ---
 # =========================
 if st.session_state.results:
     results = st.session_state.results
-
-    # Determine badge color based on score
+    st.markdown("---")
+    
     if results['match_score'] >= 80:
         badge_color = "#4CAF50"  # Green
     elif results['match_score'] >= 50:
@@ -297,7 +414,6 @@ if st.session_state.results:
     else:
         badge_color = "#F44336"  # Red
 
-    # Score display with badge
     st.markdown(
         f"""
         <div style='display:flex; align-items:center; gap:10px;'>
@@ -312,7 +428,6 @@ if st.session_state.results:
 
     st.progress(results['match_score'] / 100)
 
-    # Expanders for details
     with st.expander("Job Description Keywords"):
         st.write(", ".join(sorted(results['jd_keywords'])))
 
@@ -325,11 +440,9 @@ if st.session_state.results:
         else:
             st.success("All keywords covered!")
 
-    # Contextual suggestions
     with st.expander("Contextual Suggestions"):
         if results['missing_keywords']:
             sections = parse_resume_sections(results['resume_text'])
-            # Corrected function call with arguments
             suggestions = generate_contextual_suggestions(results['missing_keywords'], sections)
             
             if suggestions:
@@ -342,7 +455,6 @@ if st.session_state.results:
         else:
             st.success("Your resume is well-aligned with the job description. No contextual suggestions needed.")
 
-    # Alternative phrasing
     with st.expander("Alternative Phrasing"):
         if results['alternative_phrasing']:
             st.write("Consider including these related skills or alternative phrases:")
@@ -352,3 +464,5 @@ if st.session_state.results:
             st.info("No alternative phrasing suggestions at this time.")
 
     st.markdown("---")
+    st.info(f"You've chosen to apply for: **{st.session_state.selected_job['title']}** at **{st.session_state.selected_job['company']}**")
+    st.markdown(f"[Apply to this job now]({st.session_state.selected_job['url']})", unsafe_allow_html=True)
