@@ -403,4 +403,34 @@ if st.session_state.results:
         st.write(", ".join(sorted(results['resume_keywords'])))
 
     with st.expander("Missing Keywords"):
-        if results['missing
+        if results['missing_keywords']:
+            st.warning(", ".join(sorted(results['missing_keywords'])))
+        else:
+            st.success("All keywords covered!")
+
+    with st.expander("Contextual Suggestions"):
+        if results['missing_keywords']:
+            sections = parse_resume_sections(results['resume_text'])
+            suggestions = generate_contextual_suggestions(results['missing_keywords'], sections)
+            
+            if suggestions:
+                for section, suggestions_list in suggestions.items():
+                    st.markdown(f"**Suggestions for your '{section}' section:**")
+                    for suggestion in suggestions_list:
+                        st.info(suggestion)
+            else:
+                st.info("No specific contextual suggestions could be generated.")
+        else:
+            st.success("Your resume is well-aligned with the job description. No contextual suggestions needed.")
+
+    with st.expander("Alternative Phrasing"):
+        if results['alternative_phrasing']:
+            st.write("Consider including these related skills or alternative phrases:")
+            for missing_skill, alternatives in results['alternative_phrasing'].items():
+                st.markdown(f"**{missing_skill.title()}:** {', '.join(sorted(list(alternatives)))}")
+        else:
+            st.info("No alternative phrasing suggestions at this time.")
+
+    st.markdown("---")
+    st.info(f"You've chosen to apply for: **{st.session_state.selected_job['title']}** at **{st.session_state.selected_job['company']}**")
+    st.markdown(f"[Apply to this job now]({st.session_state.selected_job['url']})", unsafe_allow_html=True)
