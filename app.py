@@ -322,8 +322,7 @@ with col2:
         "France": "fr",
         "India": "in",
         "Mexico": "mx",
-        "Netherlands": "nl",
-        "Kenya": "ke" # NEW: Add Kenya to the list
+        "Netherlands": "nl"
     }
     selected_country = st.selectbox("Select Country", list(countries.keys()))
     country_code = countries[selected_country]
