@@ -108,12 +108,13 @@ nlp = load_spacy_model()
 # =========================
 # --- NEW: API & Data Fetching Functions ---
 # =========================
-def fetch_jobs_from_api(query):
+# In your app.py file, find and modify this function.
+
+def fetch_jobs_from_api(query, country_code):
     """
-    Fetches job listings from the Adzuna API based on a search query.
-    Returns a list of jobs, or an empty list if the API call fails.
+    Fetches job listings from the Adzuna API based on a search query and country code.
     """
-    base_url = "https://api.adzuna.com/v1/api/jobs/us/search/1"
+    base_url = f"https://api.adzuna.com/v1/api/jobs/{country_code}/search/1"
     params = {
         "app_id": ADZUNA_APP_ID,
         "app_key": ADZUNA_APP_KEY,
@@ -121,13 +122,12 @@ def fetch_jobs_from_api(query):
         "results_per_page": 10,
         "content-type": "application/json"
     }
-    
+
     try:
         response = requests.get(base_url, params=params)
-        response.raise_for_status()  # Raise an exception for bad status codes (4xx or 5xx)
+        response.raise_for_status()
         data = response.json()
-        
-        # Map Adzuna API fields to the format our app expects
+
         jobs = []
         for job_data in data.get('results', []):
             jobs.append({
@@ -145,7 +145,6 @@ def fetch_jobs_from_api(query):
     except Exception as e:
         st.error(f"An unexpected error occurred while processing job data: {e}")
         return []
-
 
 # =========================
 # --- Text Preprocessing & Analysis Functions (unchanged) ---
@@ -308,13 +307,33 @@ with col1:
     st.header("Your Resume (PDF)")
     resume_file = st.file_uploader("Upload your resume", type=["pdf"])
 
+# This is inside your Streamlit UI block, likely under "Job Search"
+
 with col2:
     st.header("Job Search")
+    
+    # NEW: Add a country selector
+    countries = {
+        "United States": "us",
+        "United Kingdom": "gb",
+        "Canada": "ca",
+        "Australia": "au",
+        "Germany": "de",
+        "France": "fr",
+        "India": "in",
+        "Mexico": "mx",
+        "Netherlands": "nl"
+    }
+    selected_country = st.selectbox("Select Country", list(countries.keys()))
+    country_code = countries[selected_country]
+
     search_query = st.text_input("Enter job title or keyword (e.g., 'data scientist'):")
+    
+    # Update the button to pass the selected country code
     if st.button("Search Jobs", use_container_width=True) and search_query:
-        st.session_state.jobs = fetch_jobs_from_api(search_query)
-        st.session_state.selected_job = None # Reset selected job after new search
-        st.session_state.results = None # Reset results after new search
+        st.session_state.jobs = fetch_jobs_from_api(search_query, country_code)
+        st.session_state.selected_job = None
+        st.session_state.results = None
 
     st.markdown("---")
 
