@@ -329,4 +329,4 @@ if st.session_state.results:
     if results['missing_keywords']:
         with st.expander("Contextual Suggestions"):
             sections = parse_resume_sections(results['resume_text'])
-            suggestions = generate_context_
+            suggestions = generate_contextual_suggestions
