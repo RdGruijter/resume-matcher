@@ -5,7 +5,6 @@ This Streamlit application helps a candidate find a matching job.
 It allows users to upload their resume, browse live job listings from the Adzuna API,
 and then get a detailed analysis of how well their resume matches the selected job.
 
-This version replaces the hard-coded job list with a real API integration.
 """
 
 import streamlit as st
@@ -62,9 +61,9 @@ ALTERNATIVE_PHRASING_MAP = {
 
 # NEW: Adzuna API Credentials
 # For security, consider storing these as Streamlit Secrets or environment variables
-# For this example, we'll keep them as constants.
 ADZUNA_APP_ID = st.secrets["ADZUNA_APP_ID"]
 ADZUNA_APP_KEY = st.secrets["ADZUNA_APP_KEY"]
+
 # =========================
 # --- Session State ---
 # =========================
@@ -107,8 +106,6 @@ nlp = load_spacy_model()
 # =========================
 # --- NEW: API & Data Fetching Functions ---
 # =========================
-# In your app.py file, find and modify this function.
-
 def fetch_jobs_from_api(query, country_code):
     """
     Fetches job listings from the Adzuna API based on a search query and country code.
@@ -146,9 +143,8 @@ def fetch_jobs_from_api(query, country_code):
         return []
 
 # =========================
-# --- Text Preprocessing & Analysis Functions (unchanged) ---
+# --- Text Preprocessing & Analysis Functions  ---
 # =========================
-# ... (all your existing functions like normalize_degrees, extract_keywords_spacy, etc. remain the same) ...
 def normalize_degrees(text: str) -> str:
     """
     Normalize common degree abbreviations in text for better keyword matching.
@@ -282,7 +278,6 @@ def generate_alternative_phrasing(missing_keywords: set) -> dict:
                 suggestions.setdefault(key, set()).update(alternatives)
     return suggestions
 
-
 # =========================
 # --- Streamlit UI ---
 # =========================
@@ -330,9 +325,12 @@ with col2:
     
     # Update the button to pass the selected country code
     if st.button("Search Jobs", use_container_width=True) and search_query:
-        st.session_state.jobs = fetch_jobs_from_api(search_query, country_code)
-        st.session_state.selected_job = None
-        st.session_state.results = None
+        # NEW: Wrap the API call in a spinner
+        with st.status("Fetching jobs...", expanded=True) as status:
+            st.session_state.jobs = fetch_jobs_from_api(search_query, country_code)
+            st.session_state.selected_job = None
+            st.session_state.results = None
+            status.update(label="Job listings fetched!", state="complete", expanded=False)
 
     st.markdown("---")
 
@@ -359,29 +357,33 @@ if st.session_state.selected_job:
     
     if st.button("Analyze Match with Resume", use_container_width=True):
         if resume_file:
-            st.session_state.analysis_runs += 1
-            start_time = time.time()
-            
-            try:
-                resume_text = get_text_from_pdf(resume_file)
-                jd_keywords = extract_keywords_spacy(job['description'])
-                resume_keywords = extract_keywords_spacy(resume_text)
+            # NEW: Wrap the analysis in a spinner
+            with st.status("Analyzing resume...", expanded=True) as status:
+                st.session_state.analysis_runs += 1
+                start_time = time.time()
                 
-                match_score, missing_keywords = calculate_semantic_score(jd_keywords, resume_keywords)
-                alternative_phrasing = generate_alternative_phrasing(missing_keywords)
-                
-                st.session_state.results = {
-                    "match_score": match_score,
-                    "missing_keywords": missing_keywords,
-                    "jd_keywords": jd_keywords,
-                    "resume_keywords": resume_keywords,
-                    "resume_text": resume_text,
-                    "alternative_phrasing": alternative_phrasing
-                }
-                st.session_state.total_runtime += time.time() - start_time
-            except Exception as e:
-                st.error(f"An error occurred during analysis: {e}")
-                logger.error(f"Error during analysis: {traceback.format_exc()}")
+                try:
+                    resume_text = get_text_from_pdf(resume_file)
+                    jd_keywords = extract_keywords_spacy(job['description'])
+                    resume_keywords = extract_keywords_spacy(resume_text)
+                    
+                    match_score, missing_keywords = calculate_semantic_score(jd_keywords, resume_keywords)
+                    alternative_phrasing = generate_alternative_phrasing(missing_keywords)
+                    
+                    st.session_state.results = {
+                        "match_score": match_score,
+                        "missing_keywords": missing_keywords,
+                        "jd_keywords": jd_keywords,
+                        "resume_keywords": resume_keywords,
+                        "resume_text": resume_text,
+                        "alternative_phrasing": alternative_phrasing
+                    }
+                    st.session_state.total_runtime += time.time() - start_time
+                    status.update(label="Analysis complete!", state="complete", expanded=False)
+                except Exception as e:
+                    status.update(label="Analysis failed!", state="error", expanded=True)
+                    st.error(f"An error occurred during analysis: {e}")
+                    logger.error(f"Error during analysis: {traceback.format_exc()}")
         else:
             st.warning("Please upload your resume as a PDF file first.")
 
