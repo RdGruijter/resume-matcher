@@ -111,7 +111,7 @@ def fetch_jobs_from_api(query, country_code):
     """
     Fetches job listings from a RapidAPI Job Search API.
     """
-    base_url = f"https://{RAPIDAPI_HOST}/api/v1/search" # Example URL structure
+    base_url = f"https://{RAPIDAPI_HOST}/search"
     
     headers = {
         "X-RapidAPI-Key": RAPIDAPI_KEY,
