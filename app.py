@@ -2,9 +2,10 @@
 AI Job Assistant PoC - Resume Matcher with Live Job Search
 ---------------------------------------------------------
 This Streamlit application helps a candidate find a matching job.
-It allows users to upload their resume, browse live job listings from the Adzuna API,
-and then get a detailed analysis of how well their resume matches the selected job.
+It allows users to upload their resume, browse live job listings,
+and get a detailed match analysis.
 
+This version integrates a Job Search API from RapidAPI.
 """
 
 import streamlit as st
@@ -59,10 +60,10 @@ ALTERNATIVE_PHRASING_MAP = {
     "algorithms": ["data structures", "problem-solving skills"]
 }
 
-# NEW: Adzuna API Credentials
-# For security, consider storing these as Streamlit Secrets or environment variables
-ADZUNA_APP_ID = st.secrets["ADZUNA_APP_ID"]
-ADZUNA_APP_KEY = st.secrets["ADZUNA_APP_KEY"]
+# NEW: RapidAPI Credentials
+# These are loaded securely from the .streamlit/secrets.toml file.
+RAPIDAPI_KEY = st.secrets["RAPIDAPI_KEY"]
+RAPIDAPI_HOST = st.secrets["RAPIDAPI_HOST"]
 
 # =========================
 # --- Session State ---
@@ -108,42 +109,48 @@ nlp = load_spacy_model()
 # =========================
 def fetch_jobs_from_api(query, country_code):
     """
-    Fetches job listings from the Adzuna API based on a search query and country code.
+    Fetches job listings from a RapidAPI Job Search API.
     """
-    base_url = f"https://api.adzuna.com/v1/api/jobs/{country_code}/search/1"
+    base_url = f"https://{RAPIDAPI_HOST}/api/v1/search" # Example URL structure
+    
+    headers = {
+        "X-RapidAPI-Key": RAPIDAPI_KEY,
+        "X-RapidAPI-Host": RAPIDAPI_HOST
+    }
+    
     params = {
-        "app_id": ADZUNA_APP_ID,
-        "app_key": ADZUNA_APP_KEY,
-        "what": query,
-        "results_per_page": 10,
-        "content-type": "application/json"
+        "query": query,
+        "country": country_code,
+        "limit": 10
     }
 
     try:
-        response = requests.get(base_url, params=params)
+        response = requests.get(base_url, headers=headers, params=params)
         response.raise_for_status()
         data = response.json()
 
         jobs = []
-        for job_data in data.get('results', []):
+        # The data structure from each API is different.
+        # This mapping is an example for a common structure.
+        for job_data in data.get('jobs', []):
             jobs.append({
                 "id": job_data.get('id'),
                 "title": job_data.get('title'),
-                "company": job_data.get('company', {}).get('display_name', 'N/A'),
-                "location": job_data.get('location', {}).get('display_name', 'N/A'),
+                "company": job_data.get('company', {}).get('name', 'N/A'),
+                "location": job_data.get('location', {}).get('country', 'N/A'),
                 "description": job_data.get('description'),
-                "url": job_data.get('redirect_url')
+                "url": job_data.get('url')
             })
         return jobs
     except requests.exceptions.RequestException as e:
-        st.error(f"Error fetching jobs from Adzuna API: {e}")
+        st.error(f"Error fetching jobs from RapidAPI: {e}")
         return []
     except Exception as e:
         st.error(f"An unexpected error occurred while processing job data: {e}")
         return []
 
 # =========================
-# --- Text Preprocessing & Analysis Functions  ---
+# --- Text Preprocessing & Analysis Functions (unchanged) ---
 # =========================
 def normalize_degrees(text: str) -> str:
     """
@@ -301,12 +308,9 @@ with col1:
     st.header("Your Resume (PDF)")
     resume_file = st.file_uploader("Upload your resume", type=["pdf"])
 
-# This is inside your Streamlit UI block, likely under "Job Search"
-
 with col2:
     st.header("Job Search")
     
-    # NEW: Add a country selector
     countries = {
         "United States": "us",
         "United Kingdom": "gb",
@@ -323,9 +327,7 @@ with col2:
 
     search_query = st.text_input("Enter job title or keyword (e.g., 'data scientist'):")
     
-    # Update the button to pass the selected country code
     if st.button("Search Jobs", use_container_width=True) and search_query:
-        # NEW: Wrap the API call in a spinner
         with st.status("Fetching jobs...", expanded=True) as status:
             st.session_state.jobs = fetch_jobs_from_api(search_query, country_code)
             st.session_state.selected_job = None
@@ -357,7 +359,6 @@ if st.session_state.selected_job:
     
     if st.button("Analyze Match with Resume", use_container_width=True):
         if resume_file:
-            # NEW: Wrap the analysis in a spinner
             with st.status("Analyzing resume...", expanded=True) as status:
                 st.session_state.analysis_runs += 1
                 start_time = time.time()
