@@ -63,9 +63,8 @@ ALTERNATIVE_PHRASING_MAP = {
 # NEW: Adzuna API Credentials
 # For security, consider storing these as Streamlit Secrets or environment variables
 # For this example, we'll keep them as constants.
-ADZUNA_APP_ID = "331d874f"
-ADZUNA_APP_KEY = "8b105108eb27439039b03cc12c11db4c"
-
+ADZUNA_APP_ID = st.secrets["ADZUNA_APP_ID"]
+ADZUNA_APP_KEY = st.secrets["ADZUNA_APP_KEY"]
 # =========================
 # --- Session State ---
 # =========================
