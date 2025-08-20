@@ -109,11 +109,9 @@ nlp = load_spacy_model()
 # =========================
 def fetch_jobs_from_api(query, country_code):
     """
-    Fetches job listings from a RapidAPI Job Search API.
+    Fetches job listings from the JSearch API on RapidAPI.
     """
     base_url = f"https://{st.secrets['RAPIDAPI_HOST']}/search"
-    #f"https://{RAPIDAPI_HOST}/search"
-    
     
     headers = {
         "X-RapidAPI-Key": st.secrets['RAPIDAPI_KEY'],
@@ -123,31 +121,18 @@ def fetch_jobs_from_api(query, country_code):
     params = {
         "query": query,
         "country": country_code,
-        "limit": 10
+        "num_pages": 1 # A common parameter for controlling results
     }
 
     try:
         response = requests.get(base_url, headers=headers, params=params)
         response.raise_for_status()
         data = response.json()
-        # NEW: Use st.write() to display the data in the app
-        #st.write("--- API RESPONSE ---")
-        #st.write(data)
-        jobs = []
-        # The data structure from each API is different.
-        # This mapping is an example for a common structure.
-        #for job_data in data.get('jobs', []):
-         #   jobs.append({
-          #      "id": job_data.get('id'),
-           #     "title": job_data.get('title'),
-            #    "company": job_data.get('company', {}).get('name', 'N/A'),
-             #   "location": job_data.get('location', {}).get('country', 'N/A'),
-              #  "description": job_data.get('description'),
-               # "url": job_data.get('url')
-            #})
-        #return jobs
 
-        for job_data in data.get('data', []):
+        jobs = []
+        # Correctly access the list of jobs using the 'data' key
+        # If 'data' is not present or is empty, this will correctly return an empty list
+        for job_data in data.get('data', []): 
             jobs.append({
                 "id": job_data.get('job_id'),
                 "title": job_data.get('job_title'),
@@ -155,7 +140,7 @@ def fetch_jobs_from_api(query, country_code):
                 "location": job_data.get('job_country', 'N/A'),
                 "description": job_data.get('job_description'),
                 "url": job_data.get('job_apply_link')
-        })
+            })
         return jobs
     except requests.exceptions.RequestException as e:
         st.error(f"Error fetching jobs from RapidAPI: {e}")
@@ -163,7 +148,6 @@ def fetch_jobs_from_api(query, country_code):
     except Exception as e:
         st.error(f"An unexpected error occurred while processing job data: {e}")
         return []
-
 # =========================
 # --- Text Preprocessing & Analysis Functions (unchanged) ---
 # =========================
@@ -347,7 +331,15 @@ with col2:
             st.session_state.jobs = fetch_jobs_from_api(search_query, country_code)
             st.session_state.selected_job = None
             st.session_state.results = None
-            status.update(label="Job listings fetched!", state="complete", expanded=False)
+            
+            # NEW: Check if jobs were found and update status or display message
+            if st.session_state.jobs:
+                status.update(label="Job listings fetched!", state="complete", expanded=False)
+            else:
+                status.update(label="No jobs found!", state="complete", expanded=False)
+                # Display the custom message if no jobs are found
+                st.write(f"😔 No jobs found for '{search_query}' in {selected_country}. Please try a different search or country.")
+
 
     st.markdown("---")
 
@@ -357,6 +349,8 @@ with col2:
                 st.session_state.selected_job = job
                 st.session_state.results = None
     else:
+        # This message will now only appear if no jobs are in session_state.jobs
+        # (either because no search was done, or the last search returned nothing)
         st.info("Search for a job to see listings.")
 
 
