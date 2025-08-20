@@ -131,20 +131,31 @@ def fetch_jobs_from_api(query, country_code):
         response.raise_for_status()
         data = response.json()
         # NEW: Use st.write() to display the data in the app
-        st.write("--- API RESPONSE ---")
-        st.write(data)
+        #st.write("--- API RESPONSE ---")
+        #st.write(data)
         jobs = []
         # The data structure from each API is different.
         # This mapping is an example for a common structure.
-        for job_data in data.get('jobs', []):
+        #for job_data in data.get('jobs', []):
+         #   jobs.append({
+          #      "id": job_data.get('id'),
+           #     "title": job_data.get('title'),
+            #    "company": job_data.get('company', {}).get('name', 'N/A'),
+             #   "location": job_data.get('location', {}).get('country', 'N/A'),
+              #  "description": job_data.get('description'),
+               # "url": job_data.get('url')
+            #})
+        #return jobs
+
+        for job_data in data.get('data', []):
             jobs.append({
-                "id": job_data.get('id'),
-                "title": job_data.get('title'),
-                "company": job_data.get('company', {}).get('name', 'N/A'),
-                "location": job_data.get('location', {}).get('country', 'N/A'),
-                "description": job_data.get('description'),
-                "url": job_data.get('url')
-            })
+                "id": job_data.get('job_id'),
+                "title": job_data.get('job_title'),
+                "company": job_data.get('employer_name', 'N/A'),
+                "location": job_data.get('job_country', 'N/A'),
+                "description": job_data.get('job_description'),
+                "url": job_data.get('job_apply_link')
+        })
         return jobs
     except requests.exceptions.RequestException as e:
         st.error(f"Error fetching jobs from RapidAPI: {e}")
