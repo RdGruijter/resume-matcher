@@ -128,7 +128,7 @@ def fetch_jobs_from_api(query, country_code):
         response = requests.get(base_url, headers=headers, params=params)
         response.raise_for_status()
         data = response.json()
-
+        print(data) # NEW: Add this line to inspect the raw data
         jobs = []
         # The data structure from each API is different.
         # This mapping is an example for a common structure.
