@@ -30,38 +30,6 @@ logger = logging.getLogger(__name__)
 # =========================
 # --- Constants ---
 # =========================
-"""
-CUSTOM_STOP_WORDS = {
-    "ideal", "candidate", "responsibilities", "requirements", "role",
-    "experience", "work", "solution", "team", "project", "strong",
-    "passion", "degree", "field", "innovations", "futuretech", "us",
-    "looking", "seeking", "join", "ability", "skill", "expertise"
-}
-
-SKILL_KEYWORDS = {
-    "python", "aws", "machine learning", "pytorch", "gcp", "azure", "sql", "tableau",
-    "docker", "r", "predictive modeling", "statistical modeling", "data analysis",
-    "data analytics", "data visualization", "a/b testing", "api", "database",
-    "cloud", "algorithms", "modeling"
-}
-
-EXPERIENCE_VERBS = {
-    "develop", "manage", "led", "implement", "create", "design", "build", "conduct",
-    "deploy", "leverage", "optimize", "analyze", "integrate", "present", "contributed"
-}
-
-ALTERNATIVE_PHRASING_MAP = {
-    "tensorflow": ["deep learning frameworks", "neural networks", "machine learning libraries"],
-    "pytorch": ["deep learning frameworks", "neural networks"],
-    "sql": ["database management", "relational databases", "data querying"],
-    "aws": ["cloud services", "cloud computing", "amazon web services"],
-    "nlp": ["natural language processing", "text analysis", "text mining"],
-    "docker": ["containerization", "devops tools", "microservices"],
-    "predictive modeling": ["statistical analysis", "forecasting"],
-    "data visualization": ["tableau", "power bi", "matplotlib"],
-    "algorithms": ["data structures", "problem-solving skills"]
-}
-"""
 # Function to load keywords from the JSON file
 @st.cache_data
 def load_keywords():
