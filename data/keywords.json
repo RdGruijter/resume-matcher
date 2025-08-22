@@ -1,0 +1,38 @@
+{
+    "Technology & Data": {
+        "SKILLS": [
+            "python", "aws", "machine learning", "pytorch", "gcp",
+            "azure", "sql", "tableau", "docker", "predictive modeling",
+            "statistical modeling"
+        ],
+        "EXPERIENCE_VERBS": [
+            "develop", "manage", "led", "implement", "create", "design",
+            "deploy", "leverage", "optimize", "analyze"
+        ],
+        "ALTERNATIVE_PHRASING": {
+            "tensorflow": ["deep learning frameworks", "neural networks"],
+            "sql": ["database management", "data querying"]
+        },
+        "STOP_WORDS": [
+            "agile", "scrum", "microservices", "api", "frameworks"
+        ]
+    },
+    "Healthcare": {
+        "SKILLS": [
+            "patient care", "electronic health records", "ehr", "HIPAA",
+            "medical billing", "clinical research", "pharmacology",
+            "nursing", "diagnosis"
+        ],
+        "EXPERIENCE_VERBS": [
+            "diagnose", "treat", "assist", "prescribe", "administer",
+            "document", "monitor"
+        ],
+        "ALTERNATIVE_PHRASING": {
+            "EHR": ["electronic medical records", "health information systems"],
+            "HIPAA": ["patient privacy regulations"]
+        },
+        "STOP_WORDS": [
+            "hospital", "clinic", "patient", "medical", "healthcare", "wellness"
+        ]
+    }
+}

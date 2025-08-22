@@ -29,6 +29,7 @@ logger = logging.getLogger(__name__)
 # =========================
 # --- Constants ---
 # =========================
+"""
 CUSTOM_STOP_WORDS = {
     "ideal", "candidate", "responsibilities", "requirements", "role",
     "experience", "work", "solution", "team", "project", "strong",
@@ -59,6 +60,15 @@ ALTERNATIVE_PHRASING_MAP = {
     "data visualization": ["tableau", "power bi", "matplotlib"],
     "algorithms": ["data structures", "problem-solving skills"]
 }
+"""
+# Function to load keywords from the JSON file
+@st.cache_data
+def load_keywords():
+    with open("data/keywords.json", "r") as f:
+        return json.load(f)
+
+# Call the function to load the data
+INDUSTRY_KEYWORDS = load_keywords()
 
 # NEW: RapidAPI Credentials
 # These are loaded securely from the .streamlit/secrets.toml file.
