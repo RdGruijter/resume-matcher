@@ -19,6 +19,7 @@ import os
 import psutil
 import fitz  # PyMuPDF for PDF parsing
 import requests # NEW: for making API requests
+import json
 
 # =========================
 # --- Configure Logging ---
