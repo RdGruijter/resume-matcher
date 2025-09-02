@@ -107,11 +107,9 @@ def fetch_jobs_from_api(query, country_code):
         return []
 
 def analyze_match_llm(resume_text, job_description):
-    """
-    Analyzes the resume and job description using Llama 3.1 via RapidAPI.
-    Returns a structured analysis from the LLM.
-    """
-    url = f"https://{st.secrets['LLAMA3_RAPIDAPI_HOST']}/llama3" # CORRECTED URL
+    """Analyzes the resume and job description using Llama 3.1 via RapidAPI."""
+    # Correct URL for the specific API provider
+    url = f"https://{st.secrets['LLAMA3_RAPIDAPI_HOST']}/llama3"
     
     headers = {
         "content-type": "application/json",
@@ -119,20 +117,24 @@ def analyze_match_llm(resume_text, job_description):
         "X-RapidAPI-Host": st.secrets['LLAMA3_RAPIDAPI_HOST']
     }
     
-    prompt_content = f"""
-    You are an expert resume analyzer. Your task is to compare a candidate's resume with a job description and provide a comprehensive, structured analysis.
+    # NEW: Industry-specific system prompt
+    system_prompt = """
+    You are an expert technical recruiter specializing in the software engineering and IT industries. Your goal is to critically analyze a candidate's resume and a given job description to determine a precise and relevant match. Focus exclusively on technical skills, programming languages, frameworks, cloud platforms (e.g., AWS, Azure, GCP), and methodologies (e.g., Agile, DevOps). Do not consider non-technical skills like marketing or sales.
+    """
+
+    # The user-facing prompt with the documents
+    user_prompt = f"""
+    Analyze the job description and resume and provide the following information in a structured text format:
+    1.  **Match Score:** A single number from 1 to 100 representing the overall match percentage.
+    2.  **Top Strengths:** A list of 3-5 key skills or experiences from the resume that are highly relevant to the job.
+    3.  **Areas for Improvement:** A list of 3-5 specific skills, experiences, or keywords from the job description that are missing or under-represented in the resume.
+    4.  **Summary:** A concise paragraph summarizing why the candidate is a good fit and how they can improve their resume for this specific role.
 
     Job Description:
     {job_description}
 
     Candidate's Resume:
     {resume_text}
-
-    Analyze the job description and resume and provide the following information in a structured text format:
-    1.  **Match Score:** A single number from 1 to 100 representing the overall match percentage.
-    2.  **Top Strengths:** A list of 3-5 key skills or experiences from the resume that are highly relevant to the job.
-    3.  **Areas for Improvement:** A list of 3-5 specific skills, experiences, or keywords from the job description that are missing or under-represented in the resume.
-    4.  **Summary:** A concise paragraph summarizing why the candidate is a good fit and how they can improve their resume for this specific role.
 
     Format your response exactly as follows, using bold for headings:
     **Match Score:** [score]%
@@ -146,24 +148,23 @@ def analyze_match_llm(resume_text, job_description):
     - [Missing Skill 3]
     **Summary:** [Your concise summary paragraph here.]
     """
-    
+
+    # Correct payload structure for this API
     payload = {
-        "model": "meta-llama/Meta-Llama-3.1-8B-Instruct",
-        "messages": [
-            {
-                "role": "user",
-                "content": prompt_content
-            }
-        ],
+        "prompt": user_prompt,
+        "system_prompt": system_prompt,
         "max_tokens": 500,
         "temperature": 0.3
     }
 
     try:
-        response = requests.post(url, json=payload, headers=headers)
+        # NEW: Added a timeout for the API call
+        response = requests.post(url, json=payload, headers=headers, timeout=60)
         response.raise_for_status()
         data = response.json()
-        return data['choices'][0]['message']['content']
+        
+        # Correctly retrieve the output from the API response
+        return data.get('output', 'No analysis found in the API response.')
     except requests.exceptions.RequestException as e:
         st.error(f"Error calling Llama 3.1 API: {e}")
         logger.error(f"Llama 3.1 API Error: {traceback.format_exc()}")
@@ -193,7 +194,7 @@ def get_text_from_pdf(uploaded_file) -> str:
 # --- Streamlit UI ---
 # =========================
 st.set_page_config(page_title="AI Job Assistant PoC", layout="centered")
-st.title("AI Job Assistant 📄🤝💼 Using LLAMA3")
+st.title("AI Job Assistant 📄🤝💼 using llama-3.1-8B-Instruct  ")
 st.write("Upload your resume, search for a job, and get a match analysis powered by Llama 3.1.")
 
 # Sidebar for session info
