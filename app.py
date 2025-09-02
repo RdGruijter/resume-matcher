@@ -3,13 +3,10 @@ AI Job Assistant PoC - Resume Matcher with Live Job Search
 ---------------------------------------------------------
 This Streamlit application helps a candidate find a matching job.
 It allows users to upload their resume, browse live job listings,
-and get a detailed match analysis.
-
-This version integrates a Job Search API from RapidAPI.
+and get a detailed match analysis powered by Llama 3.1.
 """
 
 import streamlit as st
-import spacy
 import re
 import logging
 import traceback
@@ -18,31 +15,40 @@ import time
 import os
 import psutil
 import fitz  # PyMuPDF for PDF parsing
-import requests # NEW: for making API requests
-import json
+import requests # For making API requests
+import json   # For loading industry keywords from JSON
 
 # =========================
 # --- Configure Logging ---
 # =========================
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
-#test commit
+
 # =========================
-# --- Constants ---
+# --- Constants and Data Loading ---
 # =========================
-# Function to load keywords from the JSON file
 @st.cache_data
-def load_keywords():
-    with open("data/keywords.json", "r") as f:
-        return json.load(f)
+def load_industry_keywords():
+    """Loads industry keywords from a JSON file."""
+    try:
+        with open("data/keywords.json", "r") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        st.error("keywords.json not found in the 'data/' directory. Please create it.")
+        return {}
+    except json.JSONDecodeError:
+        st.error("Error decoding keywords.json. Please check its format.")
+        return {}
 
-# Call the function to load the data
-INDUSTRY_KEYWORDS = load_keywords()
+INDUSTRY_KEYWORDS = load_industry_keywords()
 
-# NEW: RapidAPI Credentials
-# These are loaded securely from the .streamlit/secrets.toml file.
+# =========================
+# --- API Credentials ---
+# =========================
 RAPIDAPI_KEY = st.secrets["RAPIDAPI_KEY"]
 RAPIDAPI_HOST = st.secrets["RAPIDAPI_HOST"]
+LLAMA3_RAPIDAPI_KEY = st.secrets["LLAMA3_RAPIDAPI_KEY"]
+LLAMA3_RAPIDAPI_HOST = st.secrets["LLAMA3_RAPIDAPI_HOST"]
 
 # =========================
 # --- Session State ---
@@ -55,63 +61,35 @@ if 'total_runtime' not in st.session_state:
     st.session_state.total_runtime = 0.0
 if 'selected_job' not in st.session_state:
     st.session_state.selected_job = None
-if 'results' not in st.session_state:
-    st.session_state.results = None
+if 'llm_analysis_results' not in st.session_state:
+    st.session_state.llm_analysis_results = None
 if 'jobs' not in st.session_state:
     st.session_state.jobs = []
 
 # =========================
-# --- Load SpaCy Model ---
-# =========================
-@st.cache_resource
-def load_spacy_model():
-    """
-    Load the SpaCy medium English model.
-    Caching prevents reloading on each app refresh.
-    """
-    try:
-        start_time = time.time()
-        model = spacy.load("en_core_web_md")
-        logger.info(f"Model loaded in {time.time() - start_time:.2f}s")
-        return model
-    except OSError:
-        st.error("SpaCy model 'en_core_web_md' not found. Please install it with `python -m spacy download en_core_web_md`.")
-        st.stop()
-    except Exception:
-        st.error("Unexpected error loading SpaCy model.")
-        st.stop()
-
-nlp = load_spacy_model()
-
-# =========================
-# --- NEW: API & Data Fetching Functions ---
+# --- API & Data Fetching Functions ---
 # =========================
 def fetch_jobs_from_api(query, country_code):
-    """
-    Fetches job listings from the JSearch API on RapidAPI.
-    """
-    base_url = f"https://{st.secrets['RAPIDAPI_HOST']}/search"
+    """Fetches job listings from the JSearch API on RapidAPI."""
+    base_url = f"https://{RAPIDAPI_HOST}/search"
     
     headers = {
-        "X-RapidAPI-Key": st.secrets['RAPIDAPI_KEY'],
-        "X-RapidAPI-Host": st.secrets['RAPIDAPI_HOST']
+        "X-RapidAPI-Key": RAPIDAPI_KEY,
+        "X-RapidAPI-Host": RAPIDAPI_HOST
     }
     
     params = {
         "query": query,
         "country": country_code,
-        "num_pages": 1 # A common parameter for controlling results
+        "num_pages": 1
     }
 
     try:
         response = requests.get(base_url, headers=headers, params=params)
         response.raise_for_status()
         data = response.json()
-
         jobs = []
-        # Correctly access the list of jobs using the 'data' key
-        # If 'data' is not present or is empty, this will correctly return an empty list
-        for job_data in data.get('data', []): 
+        for job_data in data.get('data', []):
             jobs.append({
                 "id": job_data.get('job_id'),
                 "title": job_data.get('job_title'),
@@ -127,148 +105,93 @@ def fetch_jobs_from_api(query, country_code):
     except Exception as e:
         st.error(f"An unexpected error occurred while processing job data: {e}")
         return []
-# =========================
-# --- Text Preprocessing & Analysis Functions (unchanged) ---
-# =========================
-def normalize_degrees(text: str) -> str:
-    """
-    Normalize common degree abbreviations in text for better keyword matching.
-    """
-    text = re.sub(r'master of science', "master's degree", text, flags=re.IGNORECASE)
-    text = re.sub(r'\bmsc\b', "master's degree", text, flags=re.IGNORECASE)
-    text = re.sub(r'bachelor of science', "bachelor's degree", text, flags=re.IGNORECASE)
-    text = re.sub(r'\bbsc\b', "bachelor's degree", text, flags=re.IGNORECASE)
-    text = re.sub(r'ph\.?d\.?', "doctorate degree", text, flags=re.IGNORECASE)
-    return text
 
-@st.cache_data
-def extract_keywords_spacy(text: str) -> set:
+def analyze_match_llm(resume_text, job_description):
+    """Analyzes the resume and job description using Llama 3.1 via RapidAPI."""
+    url = f"https://{LLAMA3_RAPIDAPI_HOST}/v1/chat/completions"
+
+    headers = {
+        "content-type": "application/json",
+        "X-RapidAPI-Key": LLAMA3_RAPIDAPI_KEY,
+        "X-RapidAPI-Host": LLAMA3_RAPIDAPI_HOST
+    }
+    
+    prompt_content = f"""
+    You are an expert resume analyzer. Your task is to compare a candidate's resume with a job description and provide a comprehensive, structured analysis.
+
+    Job Description:
+    {job_description}
+
+    Candidate's Resume:
+    {resume_text}
+
+    Analyze the job description and resume and provide the following information in a structured text format:
+    1.  **Match Score:** A single number from 1 to 100 representing the overall match percentage.
+    2.  **Top Strengths:** A list of 3-5 key skills or experiences from the resume that are highly relevant to the job.
+    3.  **Areas for Improvement:** A list of 3-5 specific skills, experiences, or keywords from the job description that are missing or under-represented in the resume.
+    4.  **Summary:** A concise paragraph summarizing why the candidate is a good fit and how they can improve their resume for this specific role.
+
+    Format your response exactly as follows, using bold for headings:
+    **Match Score:** [score]%
+    **Top Strengths:**
+    - [Strength 1]
+    - [Strength 2]
+    - [Strength 3]
+    **Areas for Improvement:**
+    - [Missing Skill 1]
+    - [Missing Skill 2]
+    - [Missing Skill 3]
+    **Summary:** [Your concise summary paragraph here.]
     """
-    Extract keywords using SpaCy noun chunks + lemmas, removing stop words and custom noise terms.
-    """
+    
+    payload = {
+        "model": "meta-llama/Meta-Llama-3.1-8B-Instruct",
+        "messages": [
+            {
+                "role": "user",
+                "content": prompt_content
+            }
+        ],
+        "max_tokens": 500,
+        "temperature": 0.3
+    }
+
     try:
-        text = normalize_degrees(text.lower())
-        text = re.sub(r'[^\w\s]', ' ', text)
-        doc = nlp(text)
+        response = requests.post(url, json=payload, headers=headers)
+        response.raise_for_status()
+        data = response.json()
+        return data['choices'][0]['message']['content']
+    except requests.exceptions.RequestException as e:
+        st.error(f"Error calling Llama 3.1 API: {e}")
+        logger.error(f"Llama 3.1 API Error: {traceback.format_exc()}")
+        return "Sorry, an error occurred while performing the analysis."
+    except Exception as e:
+        st.error(f"An unexpected error occurred while processing LLM data: {e}")
+        logger.error(f"LLM Data Processing Error: {traceback.format_exc()}")
+        return "Sorry, an unexpected error occurred."
 
-        keywords, chunk_indices = set(), set()
-        for chunk in doc.noun_chunks:
-            keywords.add(chunk.text)
-            chunk_indices.update(t.i for t in chunk)
-
-        for token in doc:
-            if token.i not in chunk_indices and token.pos_ in {"NOUN", "ADJ", "VERB"}:
-                keywords.add(token.lemma_)
-
-        return {
-            kw for kw in keywords
-            if kw not in nlp.Defaults.stop_words
-            and kw not in CUSTOM_STOP_WORDS
-            and len(kw) > 1
-        }
-    except Exception:
-        return set()
-
-def calculate_semantic_score(jd_keywords: set, resume_keywords: set, similarity_threshold=0.7):
-    """
-    Compare job description keywords with resume keywords.
-    Includes direct matches and semantic matches above the given threshold.
-    """
-    if not jd_keywords:
-        return 100, []
-
-    matched_keywords = jd_keywords & resume_keywords
-
-    jd_vectors = {kw: nlp(kw) for kw in jd_keywords if nlp(kw).has_vector}
-    res_vectors = {kw: nlp(kw) for kw in resume_keywords if nlp(kw).has_vector}
-
-    semantically_matched = set()
-    for jd_kw, jd_doc in jd_vectors.items():
-        if jd_kw not in matched_keywords:
-            for res_doc in res_vectors.values():
-                if jd_doc.similarity(res_doc) > similarity_threshold:
-                    semantically_matched.add(jd_kw)
-                    break
-
-    all_matched = matched_keywords | semantically_matched
-    score = (len(all_matched) / len(jd_keywords)) * 100
-    return round(score, 2), jd_keywords - all_matched
-
-def parse_resume_sections(resume_text: str) -> dict:
-    """
-    Split resume into sections based on common headings.
-    """
-    sections = {}
-    pattern = re.compile(r'^(?:summary|profile|experience|work history|education|skills|projects|certifications)\s*$',
-                         re.MULTILINE | re.IGNORECASE)
-    matches = list(pattern.finditer(resume_text))
-    if not matches:
-        return {"Uncategorized": resume_text}
-
-    for i, match in enumerate(matches):
-        section_name = match.group(0).strip().lower()
-        start_index = match.end()
-        end_index = matches[i + 1].start() if i + 1 < len(matches) else len(resume_text)
-        sections[section_name] = resume_text[start_index:end_index].strip()
-    return sections
-
-def generate_contextual_suggestions(missing_keywords: set, sections: dict) -> dict:
-    """
-    Suggest where missing keywords could be added in the resume.
-    """
-    suggestions = {}
-    for keyword in missing_keywords:
-        kw_lower = keyword.lower()
-        if any(sk in kw_lower for sk in SKILL_KEYWORDS):
-            target = "skills"
-            if target in sections:
-                suggestions.setdefault(target, []).append(f"💡 Add '{keyword.title()}' to your **Skills** section.")
-            else:
-                suggestions.setdefault("General", []).append(f"💡 Create a **Skills** section with '{keyword.title()}'.")
-        elif any(ev in kw_lower for ev in EXPERIENCE_VERBS):
-            target = "experience"
-            if target in sections:
-                suggestions.setdefault(target, []).append(f"💡 Mention '{keyword.title()}' in **Experience**.")
-            else:
-                suggestions.setdefault("General", []).append(f"💡 Add an **Experience** section mentioning '{keyword.title()}'.")
-        else:
-            if "education" in sections and any(x in kw_lower for x in ["degree", "phd", "master", "bachelor"]):
-                suggestions.setdefault("education", []).append(f"💡 Highlight '{keyword.title()}' in **Education**.")
-            elif "summary" in sections or "profile" in sections:
-                suggestions.setdefault("summary", []).append(f"💡 Add '{keyword.title()}' to **Summary/Profile**.")
-            else:
-                suggestions.setdefault("General", []).append(f"💡 Include '{keyword.title()}' in a relevant section.")
-    return suggestions
-
+# =========================
+# --- Text Preprocessing ---
+# =========================
 def get_text_from_pdf(uploaded_file) -> str:
-    """
-    Extract raw text from uploaded PDF file.
-    """
+    """Extracts raw text from an uploaded PDF file."""
     if uploaded_file:
         try:
-            doc = fitz.open(stream=uploaded_file, filetype="pdf")
-            return "\n".join(page.get_text() for page in doc)
-        except Exception:
-            st.error("Could not read the PDF.")
+            doc = fitz.open(stream=uploaded_file.read(), filetype="pdf")
+            text = "\n".join(page.get_text() for page in doc)
+            text = re.sub(r'\s+', ' ', text).strip()
+            return text
+        except Exception as e:
+            st.error(f"Could not read the PDF: {e}")
+            logger.error(f"PDF Reading Error: {traceback.format_exc()}")
     return ""
-
-def generate_alternative_phrasing(missing_keywords: set) -> dict:
-    """
-    Provide alternative keyword suggestions for missing terms.
-    """
-    suggestions = {}
-    for keyword in missing_keywords:
-        for key, alternatives in ALTERNATIVE_PHRASING_MAP.items():
-            if key in keyword.lower():
-                suggestions.setdefault(key, set()).update(alternatives)
-    return suggestions
 
 # =========================
 # --- Streamlit UI ---
 # =========================
 st.set_page_config(page_title="AI Job Assistant PoC", layout="centered")
 st.title("AI Job Assistant 📄🤝💼")
-st.write("Upload your resume, search for a job, and get a match analysis.")
+st.write("Upload your resume, search for a job, and get a match analysis powered by Llama 3.1.")
 
 # Sidebar for session info
 with st.sidebar:
@@ -290,46 +213,42 @@ with col2:
     st.header("Job Search")
     
     countries = {
-        "United States": "us",
-        "United Kingdom": "gb",
-        "Canada": "ca",
-        "Australia": "au",
-        "Germany": "de",
-        "France": "fr",
-        "India": "in",
-        "Mexico": "mx",
-        "Netherlands": "nl"
+        "United States": "us", "United Kingdom": "gb", "Canada": "ca",
+        "Australia": "au", "Germany": "de", "France": "fr",
+        "India": "in", "Mexico": "mx", "Netherlands": "nl"
     }
-    selected_country = st.selectbox("Select Country", list(countries.keys()))
+    selected_country = st.selectbox("Select Country", list(countries.keys()), key="country_select")
     country_code = countries[selected_country]
 
-    search_query = st.text_input("Enter job title or keyword (e.g., 'data scientist'):")
+    search_query = st.text_input("Enter job title or keyword (e.g., 'data scientist'):", key="search_input")
     
     if st.button("Search Jobs", use_container_width=True) and search_query:
         with st.status("Fetching jobs...", expanded=True) as status:
             st.session_state.jobs = fetch_jobs_from_api(search_query, country_code)
             st.session_state.selected_job = None
-            st.session_state.results = None
+            st.session_state.llm_analysis_results = None
             
-            # NEW: Check if jobs were found and update status or display message
             if st.session_state.jobs:
                 status.update(label="Job listings fetched!", state="complete", expanded=False)
             else:
                 status.update(label="No jobs found!", state="complete", expanded=False)
-                # Display the custom message if no jobs are found
                 st.write(f"😔 No jobs found for '{search_query}' in {selected_country}. Please try a different search or country.")
-
 
     st.markdown("---")
 
     if st.session_state.jobs:
-        for job in st.session_state.jobs:
-            if st.button(f"**{job['title']}** at {job['company']}", key=f"job-{job['id']}", use_container_width=True):
-                st.session_state.selected_job = job
-                st.session_state.results = None
+        job_titles = [f"{job['title']} at {job['company']}" for job in st.session_state.jobs]
+        selected_title = st.selectbox(
+            "Select a Job to Analyze",
+            job_titles,
+            key="job_selectbox"
+        )
+        selected_job_dict = next(
+            (job for job in st.session_state.jobs if f"{job['title']} at {job['company']}" == selected_title),
+            None
+        )
+        st.session_state.selected_job = selected_job_dict
     else:
-        # This message will now only appear if no jobs are in session_state.jobs
-        # (either because no search was done, or the last search returned nothing)
         st.info("Search for a job to see listings.")
 
 
@@ -344,31 +263,24 @@ if st.session_state.selected_job:
     with st.expander("View Full Job Description"):
         st.markdown(job['description'])
         st.markdown(f"[Apply Now]({job['url']})", unsafe_allow_html=True)
-    
-    if st.button("Analyze Match with Resume", use_container_width=True):
+
+    if st.button("Analyze Match with Resume (Llama 3.1)", use_container_width=True, key="analyze_button"):
         if resume_file:
-            with st.status("Analyzing resume...", expanded=True) as status:
+            with st.status("Analyzing resume with Llama 3.1...", expanded=True) as status:
                 st.session_state.analysis_runs += 1
                 start_time = time.time()
                 
                 try:
                     resume_text = get_text_from_pdf(resume_file)
-                    jd_keywords = extract_keywords_spacy(job['description'])
-                    resume_keywords = extract_keywords_spacy(resume_text)
                     
-                    match_score, missing_keywords = calculate_semantic_score(jd_keywords, resume_keywords)
-                    alternative_phrasing = generate_alternative_phrasing(missing_keywords)
-                    
-                    st.session_state.results = {
-                        "match_score": match_score,
-                        "missing_keywords": missing_keywords,
-                        "jd_keywords": jd_keywords,
-                        "resume_keywords": resume_keywords,
-                        "resume_text": resume_text,
-                        "alternative_phrasing": alternative_phrasing
-                    }
-                    st.session_state.total_runtime += time.time() - start_time
-                    status.update(label="Analysis complete!", state="complete", expanded=False)
+                    if not resume_text.strip():
+                        st.error("Could not extract text from the uploaded resume. Please try a different PDF.")
+                        status.update(label="Analysis failed!", state="error", expanded=True)
+                    else:
+                        llm_analysis_output = analyze_match_llm(resume_text, job['description'])
+                        st.session_state.llm_analysis_results = llm_analysis_output
+                        st.session_state.total_runtime += time.time() - start_time
+                        status.update(label="Analysis complete!", state="complete", expanded=False)
                 except Exception as e:
                     status.update(label="Analysis failed!", state="error", expanded=True)
                     st.error(f"An error occurred during analysis: {e}")
@@ -376,70 +288,12 @@ if st.session_state.selected_job:
         else:
             st.warning("Please upload your resume as a PDF file first.")
 
-
-# =========================
-# --- Results Section ---
-# =========================
-if st.session_state.results:
-    results = st.session_state.results
+# LLM Analysis Results Section
+if st.session_state.llm_analysis_results:
     st.markdown("---")
+    st.header("Match Analysis powered by Llama 3.1 🧠")
+    st.markdown(st.session_state.llm_analysis_results)
     
-    if results['match_score'] >= 80:
-        badge_color = "#4CAF50"
-    elif results['match_score'] >= 50:
-        badge_color = "#FFC107"
-    else:
-        badge_color = "#F44336"
-
-    st.markdown(
-        f"""
-        <div style='display:flex; align-items:center; gap:10px;'>
-            <h3 style='margin:0;'>Match Score 🎯: {results['match_score']}%</h3>
-            <span style='background-color:{badge_color}; color:white; padding:5px 10px; border-radius:12px; font-weight:bold;'>
-                {('High' if badge_color=="#4CAF50" else 'Medium' if badge_color=="#FFC107" else 'Low')}
-            </span>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-
-    st.progress(results['match_score'] / 100)
-
-    with st.expander("Job Description Keywords"):
-        st.write(", ".join(sorted(results['jd_keywords'])))
-
-    with st.expander("Resume Keywords"):
-        st.write(", ".join(sorted(results['resume_keywords'])))
-
-    with st.expander("Missing Keywords"):
-        if results['missing_keywords']:
-            st.warning(", ".join(sorted(results['missing_keywords'])))
-        else:
-            st.success("All keywords covered!")
-
-    with st.expander("Contextual Suggestions"):
-        if results['missing_keywords']:
-            sections = parse_resume_sections(results['resume_text'])
-            suggestions = generate_contextual_suggestions(results['missing_keywords'], sections)
-            
-            if suggestions:
-                for section, suggestions_list in suggestions.items():
-                    st.markdown(f"**Suggestions for your '{section}' section:**")
-                    for suggestion in suggestions_list:
-                        st.info(suggestion)
-            else:
-                st.info("No specific contextual suggestions could be generated.")
-        else:
-            st.success("Your resume is well-aligned with the job description. No contextual suggestions needed.")
-
-    with st.expander("Alternative Phrasing"):
-        if results['alternative_phrasing']:
-            st.write("Consider including these related skills or alternative phrases:")
-            for missing_skill, alternatives in results['alternative_phrasing'].items():
-                st.markdown(f"**{missing_skill.title()}:** {', '.join(sorted(list(alternatives)))}")
-        else:
-            st.info("No alternative phrasing suggestions at this time.")
-
     st.markdown("---")
     st.info(f"You've chosen to apply for: **{st.session_state.selected_job['title']}** at **{st.session_state.selected_job['company']}**")
     st.markdown(f"[Apply to this job now]({st.session_state.selected_job['url']})", unsafe_allow_html=True)
