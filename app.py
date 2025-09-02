@@ -107,13 +107,16 @@ def fetch_jobs_from_api(query, country_code):
         return []
 
 def analyze_match_llm(resume_text, job_description):
-    """Analyzes the resume and job description using Llama 3.1 via RapidAPI."""
-    url = f"https://{LLAMA3_RAPIDAPI_HOST}/v1/chat/completions"
-
+    """
+    Analyzes the resume and job description using Llama 3.1 via RapidAPI.
+    Returns a structured analysis from the LLM.
+    """
+    url = f"https://{st.secrets['LLAMA3_RAPIDAPI_HOST']}/llama3" # CORRECTED URL
+    
     headers = {
         "content-type": "application/json",
-        "X-RapidAPI-Key": LLAMA3_RAPIDAPI_KEY,
-        "X-RapidAPI-Host": LLAMA3_RAPIDAPI_HOST
+        "X-RapidAPI-Key": st.secrets['LLAMA3_RAPIDAPI_KEY'],
+        "X-RapidAPI-Host": st.secrets['LLAMA3_RAPIDAPI_HOST']
     }
     
     prompt_content = f"""
@@ -190,7 +193,7 @@ def get_text_from_pdf(uploaded_file) -> str:
 # --- Streamlit UI ---
 # =========================
 st.set_page_config(page_title="AI Job Assistant PoC", layout="centered")
-st.title("AI Job Assistant 📄🤝💼")
+st.title("AI Job Assistant 📄🤝💼 Using LLAMA3")
 st.write("Upload your resume, search for a job, and get a match analysis powered by Llama 3.1.")
 
 # Sidebar for session info
