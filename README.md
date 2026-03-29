@@ -43,10 +43,12 @@ Plak de Vacaturetekst in het rechter tekstveld.
 Klik op "Analyze Resume vs. Job Description".
 Bekijk je score en de suggesties om je CV te verbeteren.
 
-🧠 Hoe het werktPreprocessing: Tekst wordt genormaliseerd (bijv. diploma's worden naar een standaardformaat omgezet).
-Tokenizatie: SpaCy verwerkt de tekst naar noun_chunks en filtert op relevante POS-tags (Noun, Adj, Verb).Filtering: Stopwoorden en algemene termen (zoals "team player") worden gefilterd met een aangepaste lijst.
+🧠 Hoe het werkt
+Preprocessing: Tekst wordt genormaliseerd (bijv. diploma's worden naar een standaardformaat omgezet).
+Tokenizatie: SpaCy verwerkt de tekst naar noun_chunks en filtert op relevante POS-tags (Noun, Adj, Verb). Filtering: Stopwoorden en algemene termen (zoals "team player") worden gefilterd met een aangepaste lijst.
 Similarity Check: Voor elk woord in de vacature wordt gecontroleerd of er een directe match is óf een semantische match (threshold $> 0.7$) in het CV.
 
-📝 Logboek & MonitoringDe app houdt logs bij via de standaard Python logging module. Dit helpt bij het tracken van eventuele fouten tijdens het laden van het model of tijdens de extractie-fase.
+📝 Logboek & Monitoring
+De app houdt logs bij via de standaard Python logging module. Dit helpt bij het tracken van eventuele fouten tijdens het laden van het model of tijdens de extractie-fase.
 
 Gemaakt als PoC voor intelligente CV-optimalisatie.
