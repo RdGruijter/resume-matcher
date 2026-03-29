@@ -1,4 +1,4 @@
-AI Job Assistant: Resume & Job Description Matcher (PoC)
+Resume & Job Description Matcher (PoC)
 Een Proof of Concept (PoC) applicatie gebouwd met Streamlit en SpaCy die werkzoekenden helpt hun CV te optimaliseren voor specifieke vacatures. De tool analyseert de tekst op basis van trefwoorden en semantische gelijkenis om een nauwkeurige "match score" te geven.
 
 🚀 Functionaliteiten
